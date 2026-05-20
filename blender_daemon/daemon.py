@@ -15,7 +15,6 @@ external packages into Blender's bundled Python.
 import json
 import socket
 import sys
-import threading
 import traceback
 
 try:
@@ -38,8 +37,29 @@ def status() -> dict:
 
 
 def reset() -> dict:
+    """Clear loaded scene data without going through the homefile-read operator.
+
+    `bpy.ops.wm.read_factory_settings()` tears down UI regions and crashes in
+    background mode. Direct `bpy.data` removal does the same logical work and
+    stays on the Python main thread cleanly.
+    """
     if bpy is not None:
-        bpy.ops.wm.read_factory_settings(use_empty=True)
+        for collection_name in (
+            "objects",
+            "meshes",
+            "materials",
+            "armatures",
+            "cameras",
+            "lights",
+            "images",
+            "actions",
+            "node_groups",
+            "collections",
+        ):
+            collection = getattr(bpy.data, collection_name, None)
+            if collection is None:
+                continue
+            bpy.data.batch_remove(list(collection))
     return {"ok": True}
 
 
@@ -121,6 +141,13 @@ def _serve_client(conn: socket.socket) -> None:
 
 
 def serve(port: int, host: str = "127.0.0.1") -> None:
+    """Single-threaded accept loop.
+
+    Blender's Python API is not thread-safe — operators and `bpy.data` mutation
+    must happen on the main thread (the thread the script runs on under
+    `blender --background --python`). Handling clients serially on this thread
+    keeps every handler call on the main thread; concurrent clients queue.
+    """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((host, port))
@@ -130,13 +157,10 @@ def serve(port: int, host: str = "127.0.0.1") -> None:
     while True:
         try:
             conn, _addr = sock.accept()
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, OSError):
             sock.close()
             return
-        except OSError:
-            sock.close()
-            return
-        threading.Thread(target=_serve_client, args=(conn,), daemon=True).start()
+        _serve_client(conn)
 
 
 # ---------------------------------------------------------------------------
