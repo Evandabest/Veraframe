@@ -105,27 +105,66 @@ def _add_empty(name: str, location: tuple[float, float, float]) -> None:
     _link(obj)
 
 
-def _add_camera(
+def _add_camera_looking_at(
     name: str,
     location: tuple[float, float, float],
-    rotation: tuple[float, float, float],
-) -> None:
+    look_at: tuple[float, float, float],
+) -> object:
+    """Place a camera at `location` aimed at `look_at`.
+
+    Computes the rotation from a track-quat (-Z forward, +Y up convention).
+    Returns the created object so the caller can mark it the active camera.
+    """
+    import mathutils
+
     camera_data = bpy.data.cameras.new(name=f"{name}_data")
     obj = bpy.data.objects.new(name, camera_data)
     obj.location = location
-    obj.rotation_euler = rotation
+
+    direction = mathutils.Vector(look_at) - mathutils.Vector(location)
+    # Camera default faces -Z; align that to the direction vector.
+    obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     _link(obj)
+    return obj
+
+
+def _add_sun(name: str, energy: float = 3.0) -> None:
+    light_data = bpy.data.lights.new(name=f"{name}_data", type="SUN")
+    light_data.energy = energy
+    obj = bpy.data.objects.new(name, light_data)
+    obj.location = (0.0, 0.0, 10.0)
+    # Angle the sun so it lights the scene from above-front.
+    import mathutils
+
+    obj.rotation_euler = mathutils.Vector((0.0, 0.0, -1.0)).to_track_quat("Z", "Y").to_euler()
+    _link(obj)
+
+
+def _set_world_background(color: tuple[float, float, float], strength: float) -> None:
+    world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
+    bpy.context.scene.world = world
+    world.use_nodes = True
+    bg = world.node_tree.nodes["Background"]
+    bg.inputs[0].default_value = (*color, 1.0)
+    bg.inputs[1].default_value = strength
 
 
 def build() -> None:
     _wipe()
     _add_plane("Floor", size=20.0, location=(0.0, 0.0, 0.0))
     _add_box("Wall_Back", size=2.0, location=(0.0, 5.0, 1.5), scale=(10.0, 0.5, 3.0))
-    _add_point_light("MainLight", location=(0.0, 0.0, 5.0), energy=300.0)
+    _add_point_light("MainLight", location=(0.0, 0.0, 5.0), energy=2000.0)
+    _add_sun("KeyLight", energy=2.0)
+    _set_world_background(color=(0.15, 0.15, 0.18), strength=0.5)
+
     for name, loc in EMPTY_LOCATIONS.items():
         _add_empty(name, loc)
-    # Camera looking toward the origin from south, slightly elevated.
-    _add_camera("wide", location=(0.0, -10.0, 3.0), rotation=(1.2, 0.0, 0.0))
+
+    # Camera looking at center_room from a back-right diagonal.
+    camera = _add_camera_looking_at(
+        "wide", location=(6.0, -8.0, 4.0), look_at=(0.0, 0.0, 1.0)
+    )
+    bpy.context.scene.camera = camera
 
 
 def _parse_output_arg() -> str:

@@ -40,6 +40,12 @@ def execute(
     if armature.animation_data is None:
         armature.animation_data_create()
 
+    # FBX import auto-assigns an embedded T-pose to `animation_data.action`.
+    # That direct action overrides NLA strips in Blender's eval order, so we
+    # clear it before adding our strip — otherwise the character T-poses while
+    # our breathing-idle strip sits ignored on the NLA track.
+    armature.animation_data.action = None
+
     track = armature.animation_data.nla_tracks.new()
     track.name = f"veraframe_idle_{action_id}"
 
