@@ -10,7 +10,8 @@ Early development. Not yet usable.
 
 - Python 3.12+
 - [`uv`](https://github.com/astral-sh/uv) for dependency management
-- Blender 4.2+ on `$PATH`
+- Blender 4.2+ (set `BLENDER_PATH` env var if not on `$PATH`; macOS default `/Applications/Blender.app/Contents/MacOS/Blender` is auto-detected)
+- FFmpeg on `$PATH` or `FFMPEG_PATH` env var (Blender's macOS build ships without it; install via `brew install ffmpeg`)
 - An LLM provider account (OpenAI, Anthropic, Gemini) or a local model via Ollama
 
 ## Setup
