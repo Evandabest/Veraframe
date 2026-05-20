@@ -1,22 +1,8 @@
 {
   "id": "student_v1",
-  "display_name": "Student",
-  "description": "A teenage student in casual clothes, suitable as a generic protagonist.",
+  "display_name": "Student (X Bot)",
+  "description": "Mixamo X Bot — a free Adobe-supplied humanoid placeholder used as the MVP test character. Mixamo-rigged body (65 mixamorig:* bones), no face blendshapes.",
   "mesh_file": "character.fbx",
   "rig_type": "mixamo",
-  "face_blendshapes": [
-    "Joy",
-    "Angry",
-    "Sorrow",
-    "Fun",
-    "Neutral",
-    "A",
-    "I",
-    "U",
-    "E",
-    "O",
-    "Blink",
-    "Blink_L",
-    "Blink_R"
-  ]
+  "face_blendshapes": []
 }

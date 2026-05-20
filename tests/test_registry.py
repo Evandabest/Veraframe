@@ -71,7 +71,7 @@ def test_load_real_assets_directory() -> None:
     assert "walk_in_place" in r.animations
     assert r.scenes["dark_lab"].spawn_points == ("door", "center_room", "robot_station")
     assert r.characters["student_v1"].rig_type == "mixamo"
-    assert "Joy" in r.characters["student_v1"].face_blendshapes
+    assert isinstance(r.characters["student_v1"].face_blendshapes, tuple)
 
 
 def test_load_nonexistent_directory_returns_empty(tmp_path: Path) -> None:
