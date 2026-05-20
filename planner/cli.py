@@ -62,12 +62,11 @@ def main(argv: list[str] | None = None) -> int:
         print("Use the Electron app. Pass --dev to run the developer CLI.")
         return 1
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
-    )
-
     if args.command == "render":
+        logging.basicConfig(
+            level=logging.DEBUG if args.verbose else logging.INFO,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        )
         return _cmd_render(args)
 
     parser.print_help()
