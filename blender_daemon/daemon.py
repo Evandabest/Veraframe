@@ -27,6 +27,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from blender_daemon.action_executor import execute_timeline  # noqa: E402
 from blender_daemon.character_loader import load_character  # noqa: E402
+from blender_daemon.render_manager import render  # noqa: E402
 from blender_daemon.scene_loader import load_scene  # noqa: E402
 
 try:
@@ -81,6 +82,7 @@ HANDLERS: dict[str, callable] = {
     "load_scene": load_scene,
     "load_character": load_character,
     "execute_timeline": execute_timeline,
+    "render": render,
 }
 
 
