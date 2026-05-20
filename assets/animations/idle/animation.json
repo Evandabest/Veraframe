@@ -1,0 +1,7 @@
+{
+  "id": "idle",
+  "display_name": "Idle (breathing)",
+  "fbx_file": "animation.fbx",
+  "loop": true,
+  "applies_to_rig": "mixamo"
+}
