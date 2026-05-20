@@ -1,0 +1,7 @@
+{
+  "id": "walk_in_place",
+  "display_name": "Walk (in place)",
+  "fbx_file": "walk_in_place.fbx",
+  "loop": true,
+  "applies_to_rig": "mixamo"
+}
