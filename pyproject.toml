@@ -6,9 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
-[project.scripts]
-veraframe = "planner.cli:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
