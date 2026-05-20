@@ -54,6 +54,12 @@ def main(argv: list[str] | None = None) -> int:
     render_parser.add_argument(
         "--fps", type=int, default=24, help="Frame rate for execution + render."
     )
+    render_parser.add_argument(
+        "--duration",
+        type=float,
+        default=2.0,
+        help="Length of the mock timeline in seconds (only used with --mock).",
+    )
     render_parser.add_argument("--verbose", "-v", action="store_true")
 
     args = parser.parse_args(argv)
@@ -95,8 +101,11 @@ def _cmd_render(args: argparse.Namespace) -> int:
     )
 
     if args.mock:
-        log.info("--mock: skipping LLM call, using canned single-idle timeline")
-        project_dict = _canned_timeline(registry)
+        log.info(
+            "--mock: skipping LLM call, using canned %.1fs single-idle timeline",
+            args.duration,
+        )
+        project_dict = _canned_timeline(registry, duration=args.duration)
     else:
         from planner.validator import generate_validated_timeline
 
@@ -189,8 +198,8 @@ def _cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
-def _canned_timeline(registry: Any) -> dict:
-    """Build a hand-written timeline for `--mock`: a single 2s idle.
+def _canned_timeline(registry: Any, duration: float = 2.0) -> dict:
+    """Build a hand-written timeline for `--mock`: one idle of `duration` seconds.
 
     Picks the first scene and the first character from the registry; uses the
     first spawn point in that scene. Errors if any of those are empty.
@@ -213,7 +222,7 @@ def _canned_timeline(registry: Any) -> dict:
             {
                 "id": "shot_001",
                 "start": 0.0,
-                "end": 2.0,
+                "end": duration,
                 "camera": camera,
                 "actions": [
                     {
@@ -221,7 +230,7 @@ def _canned_timeline(registry: Any) -> dict:
                         "type": "idle",
                         "character": "student",
                         "start": 0.0,
-                        "end": 2.0,
+                        "end": duration,
                     }
                 ],
             }

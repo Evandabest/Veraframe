@@ -78,8 +78,13 @@ class DaemonHandle:
         self.port = port
         self.process = process
 
-    def call(self, method: str, /, **params: Any) -> Any:
-        """Send a JSON-RPC request and return the `result` field."""
+    def call(self, method: str, /, *, _timeout: float | None = None, **params: Any) -> Any:
+        """Send a JSON-RPC request and return the `result` field.
+
+        `_timeout` caps how long we wait for the daemon to respond after the
+        request is sent. None means "wait forever" — appropriate for renders
+        and other long operations that can legitimately take minutes.
+        """
         request = {
             "jsonrpc": "2.0",
             "id": next(self._id_counter),
@@ -88,8 +93,10 @@ class DaemonHandle:
         }
         line = (json.dumps(request) + "\n").encode("utf-8")
 
-        with socket.create_connection(("127.0.0.1", self.port), timeout=30.0) as s:
+        # Connection setup is always fast; only the response read should be slow.
+        with socket.create_connection(("127.0.0.1", self.port), timeout=10.0) as s:
             s.sendall(line)
+            s.settimeout(_timeout)  # None = no timeout
             buf = b""
             while b"\n" not in buf:
                 chunk = s.recv(65536)
