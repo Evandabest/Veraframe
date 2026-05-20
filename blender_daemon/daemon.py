@@ -25,6 +25,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from blender_daemon.action_executor import execute_timeline  # noqa: E402
 from blender_daemon.character_loader import load_character  # noqa: E402
 from blender_daemon.scene_loader import load_scene  # noqa: E402
 
@@ -79,6 +80,7 @@ HANDLERS: dict[str, callable] = {
     "reset": reset,
     "load_scene": load_scene,
     "load_character": load_character,
+    "execute_timeline": execute_timeline,
 }
 
 
