@@ -16,6 +16,16 @@ import json
 import socket
 import sys
 import traceback
+from pathlib import Path
+
+# Blender invokes this file as `--python /abs/path/to/blender_daemon/daemon.py`,
+# which doesn't add the project root to sys.path. Insert it so `from
+# blender_daemon.<x>` imports resolve.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from blender_daemon.scene_loader import load_scene  # noqa: E402
 
 try:
     import bpy
@@ -66,6 +76,7 @@ def reset() -> dict:
 HANDLERS: dict[str, callable] = {
     "status": status,
     "reset": reset,
+    "load_scene": load_scene,
 }
 
 
