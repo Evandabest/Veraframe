@@ -70,9 +70,6 @@ def execute(
     strip.extrapolation = "HOLD"
 
     # Translation F-curve: keyframe current location at start_frame, target at end_frame.
-    # `armature.keyframe_insert` will auto-create an action and assign it to
-    # `animation_data.action` (the "tweak" slot). We need to move that action
-    # off the tweak slot onto its own NLA track — see comment below.
     start_loc = tuple(armature.location)
     end_loc = tuple(target_location)
 
@@ -82,23 +79,33 @@ def execute(
         armature.location[axis_index] = end_loc[axis_index]
         armature.keyframe_insert(data_path="location", index=axis_index, frame=int(end_frame))
 
-    # CRITICAL: the auto-created action assigned to `animation_data.action`
-    # acts as Blender's "tweak action" — its slot (OBSlot for armatures)
-    # claims every channel in the slot, including pose-bone rotations the
-    # action has no keyframes for. In REPLACE blend mode the tweak slot
-    # forces unclaimed channels to rest pose, which silently suppresses
-    # the walk NLA strip's bone rotations and leaves the legs frozen while
-    # only translation animates. Fix: push the location action onto its
-    # own NLA track and unassign it from the tweak slot, so the location
-    # animates independently and the walk strip's bone rotations apply.
+    # CRITICAL: `armature.keyframe_insert` auto-creates an action and assigns
+    # it to `animation_data.action` — Blender's "tweak action" slot. That
+    # slot runs in REPLACE mode on top of the NLA stack, and crucially the
+    # auto-created OBSlot covers EVERY channel of the Object datablock
+    # (location AND pose-bone rotations). REPLACE on a slot whose action
+    # has only location curves silently forces all other channels in the
+    # slot to default — i.e. it resets every pose bone to rest pose, which
+    # kills the walk NLA strip's leg animation.
+    #
+    # Workaround: push the location action onto its own NLA track with
+    # blend_type = ADD instead of REPLACE. ADD treats unanimated channels
+    # as +0 (no contribution) so bone rotations pass through cleanly. To
+    # keep absolute location values working under additive blending, we
+    # also zero the armature's static location so the strip's evaluated
+    # curve IS the final location (base 0 + curve = curve).
     loc_action = armature.animation_data.action
     if loc_action is not None:
         loc_track = armature.animation_data.nla_tracks.new()
         loc_track.name = f"veraframe_walk_loc_{action_id}"
-        loc_track.strips.new(
+        loc_strip = loc_track.strips.new(
             name=f"loc_{action_id}", start=int(start_frame), action=loc_action
         )
+        loc_strip.blend_type = "ADD"
+        loc_strip.extrapolation = "HOLD"
         armature.animation_data.action = None
+        # Reset static location to 0 so additive blend computes absolute values.
+        armature.location = (0.0, 0.0, 0.0)
 
     # Don't rotate the armature to face the direction of travel. Same reason
     # as in `character_loader.load_character`: setting `rotation_quaternion`
@@ -109,9 +116,11 @@ def execute(
     # (+Y world) reads well; the character moonwalks sideways if the route
     # is not aligned with +Y. Better facing handling is a follow-up.
 
-    # Leave armature.location at end_loc so subsequent actions see the new
-    # position as the "current" location.
-    armature.location = end_loc
+    # NOTE: we deliberately leave `armature.location` at (0,0,0) above so the
+    # NLA ADD blend computes absolute values from the strip. The character's
+    # apparent world position is driven entirely by the strip during the walk
+    # and held at the strip's last value afterward (extrapolation = HOLD).
+    # The "current location" for subsequent walk_to chaining is end_loc.
 
     return {
         "armature": armature.name,

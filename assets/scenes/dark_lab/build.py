@@ -166,11 +166,12 @@ def build() -> None:
     for name, loc in EMPTY_LOCATIONS.items():
         _add_empty(name, loc)
 
-    # Visible markers at spawn points so the scene reads as more than an
-    # empty room. Empties themselves don't render — these are companion
-    # geometry placed at the same locations.
-    _add_box("Door_Frame", size=2.0, location=(0.0, 5.0, 1.0), scale=(0.8, 0.15, 1.0))
-    _add_box("Robot_Station", size=2.0, location=(0.0, -3.0, 0.35), scale=(0.6, 0.6, 0.35))
+    # Visible reference geometry. NOT at the spawn point locations — the
+    # character spawns AT those empties, so any solid box co-located with
+    # a spawn point clips through (or contains) the character. Place these
+    # offset so the character can be seen next to / approaching them.
+    _add_box("Door_Frame", size=2.0, location=(0.0, 6.5, 1.5), scale=(0.9, 0.2, 1.5))
+    _add_box("Robot_Station", size=2.0, location=(1.5, -3.0, 0.5), scale=(0.5, 0.5, 0.5))
 
     # Off-axis reference object for look_at demos that need a clean side
     # turn (90° or so). Both "door" and "robot_station" lie on the Y axis,
