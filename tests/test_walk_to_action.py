@@ -145,8 +145,8 @@ def test_real_walk_to_places_strip_and_translation() -> None:
     assert len(result["executed"]) == 1
     placed = result["executed"][0]
     assert placed["type"] == "walk_to"
-    assert placed["start_location"] == [-5.0, 0.0, 0.0]  # door
-    assert placed["end_location"] == [3.0, 0.0, 0.0]  # robot_station
+    assert placed["start_location"] == [0.0, 5.0, 0.0]  # door
+    assert placed["end_location"] == [0.0, -3.0, 0.0]  # robot_station
     assert placed["track"] == "veraframe_walk_a1"
     assert placed["frame_start"] == 0
     # The walk cycle must repeat enough times to span the requested duration,

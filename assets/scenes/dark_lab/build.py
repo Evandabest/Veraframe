@@ -15,9 +15,13 @@ import sys
 import bpy
 
 EMPTY_LOCATIONS: dict[str, tuple[float, float, float]] = {
-    "door": (-5.0, 0.0, 0.0),
+    # Spawn points along the -Y direction so walks align with Mixamo
+    # characters' natural facing (they face -Y at rest). With camera on the
+    # -Y side, a door→center walk plays out as a character walking toward
+    # the camera, which makes the leg cycle clearly visible.
+    "door": (0.0, 5.0, 0.0),
     "center_room": (0.0, 0.0, 0.0),
-    "robot_station": (3.0, 0.0, 0.0),
+    "robot_station": (0.0, -3.0, 0.0),
 }
 
 
@@ -152,10 +156,9 @@ def _set_world_background(color: tuple[float, float, float], strength: float) ->
 def build() -> None:
     _wipe()
     _add_plane("Floor", size=20.0, location=(0.0, 0.0, 0.0))
-    # Wall behind the character from the camera's POV. Camera is on +Y side
-    # (Mixamo's natural facing direction); wall is on -Y so it doesn't block
-    # the view.
-    _add_box("Wall_Back", size=2.0, location=(0.0, -5.0, 1.5), scale=(10.0, 0.5, 3.0))
+    # Wall behind the character from the camera's POV. Camera is south
+    # (-Y); wall is north (+Y, behind the spawn line) so it doesn't block.
+    _add_box("Wall_Back", size=2.0, location=(0.0, 7.0, 1.5), scale=(10.0, 0.5, 3.0))
     _add_point_light("MainLight", location=(0.0, 0.0, 5.0), energy=2000.0)
     _add_sun("KeyLight", energy=2.0)
     _set_world_background(color=(0.15, 0.15, 0.18), strength=0.5)
@@ -163,12 +166,11 @@ def build() -> None:
     for name, loc in EMPTY_LOCATIONS.items():
         _add_empty(name, loc)
 
-    # Camera on the +Y side of the character (Mixamo's natural facing
-    # direction) so the character's front is visible during idle/walk
-    # without any armature rotation gymnastics. Slight X offset for a
-    # 3/4-front angle instead of dead head-on.
+    # Camera south (-Y) of the character so we see their front (Mixamo's
+    # natural facing is -Y). A small +X offset gives a 3/4-front angle
+    # instead of dead head-on.
     camera = _add_camera_looking_at(
-        "wide", location=(-3.0, 8.0, 4.0), look_at=(0.0, 0.0, 1.0)
+        "wide", location=(3.0, -8.0, 4.0), look_at=(0.0, 0.0, 1.0)
     )
     bpy.context.scene.camera = camera
 

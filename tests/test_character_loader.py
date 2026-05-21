@@ -45,7 +45,7 @@ def test_real_load_character_returns_mixamo_inventory() -> None:
 
     assert result["bone_count"] == 65
     assert result["mixamo_bone_count"] == 65
-    assert result["spawn_location"] == [-5.0, 0.0, 0.0]
+    assert result["spawn_location"] == [0.0, 5.0, 0.0]  # door
     assert result["mesh_names"] == ["Beta_Joints", "Beta_Surface"]
     assert result["handle"]
     # X Bot has no blendshapes — warning should surface, but the load succeeds.
