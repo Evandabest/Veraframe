@@ -26,6 +26,7 @@ from actions import set_lighting as set_lighting_action
 from actions import sit as sit_action
 from actions import smile as smile_action
 from actions import stand as stand_action
+from actions import talk as talk_action
 from actions import turn_to as turn_to_action
 from actions import walk_to as walk_to_action
 
@@ -81,6 +82,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype in ("sit", "stand"):
                 _dispatch_pose(action, characters, fps, executed, skipped)
+                continue
+
+            if atype == "talk":
+                _dispatch_talk(action, characters, fps, executed, skipped)
                 continue
 
             if atype in ("smile", "frown", "blink"):
@@ -411,6 +416,49 @@ def _dispatch_pose(
         return
 
     executed.append({"id": action_id, "type": atype, **result})
+
+
+def _dispatch_talk(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "talk",
+                "reason": f"character '{char_id}' not loaded (no armature with that handle)",
+            }
+        )
+        return
+
+    text = action.get("text")
+    if not text:
+        skipped.append({"id": action_id, "type": "talk", "reason": "text is required"})
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = talk_action.execute(
+            armature,
+            text=text,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            action_id=action_id,
+            emotion=action.get("emotion"),
+        )
+    except talk_action.TalkActionError as e:
+        skipped.append({"id": action_id, "type": "talk", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "talk", **result})
 
 
 _EMOTION_HANDLERS = {
