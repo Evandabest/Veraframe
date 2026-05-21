@@ -211,7 +211,8 @@ def _canned_timeline(registry: Any, duration: float = 2.0) -> dict:
 
     scene_id, scene = next(iter(registry.scenes.items()))
     char_preset_id = next(iter(registry.characters))
-    spawn = scene.spawn_points[0]
+    # Prefer a centered spawn for the demo if one exists; otherwise first.
+    spawn = "center_room" if "center_room" in scene.spawn_points else scene.spawn_points[0]
     camera = scene.camera_presets[0]
 
     return {
