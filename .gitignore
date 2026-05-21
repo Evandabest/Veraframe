@@ -12,8 +12,8 @@ __pycache__/
 .env
 
 # Distribution
-build/
-dist/
+/build/
+/dist/
 *.egg
 
 # Blender
@@ -25,10 +25,11 @@ dist/
 renders/
 *.mp4
 *.mkv
-*.png
-*.jpg
-*.jpeg
 *.exr
+# (image files allowed by default; ignore renders specifically)
+/renders/*.png
+/renders/*.jpg
+/renders/*.jpeg
 
 # OS
 .DS_Store
@@ -36,6 +37,6 @@ Thumbs.db
 
 # Editors
 .idea/
-.vscode/
+/.vscode/
 *.swp
 *~
