@@ -1,0 +1,802 @@
+{
+  "$defs": {
+    "BlinkAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "blink",
+          "default": "blink",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "BlinkAction",
+      "type": "object"
+    },
+    "CameraCutAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "camera_cut",
+          "default": "camera_cut",
+          "title": "Type",
+          "type": "string"
+        },
+        "camera": {
+          "minLength": 1,
+          "title": "Camera",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "camera"
+      ],
+      "title": "CameraCutAction",
+      "type": "object"
+    },
+    "CameraDollyAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "camera_dolly",
+          "default": "camera_dolly",
+          "title": "Type",
+          "type": "string"
+        },
+        "from_camera": {
+          "minLength": 1,
+          "title": "From Camera",
+          "type": "string"
+        },
+        "to_camera": {
+          "minLength": 1,
+          "title": "To Camera",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "from_camera",
+        "to_camera"
+      ],
+      "title": "CameraDollyAction",
+      "type": "object"
+    },
+    "Character": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "preset": {
+          "minLength": 1,
+          "title": "Preset",
+          "type": "string"
+        },
+        "spawn": {
+          "minLength": 1,
+          "title": "Spawn",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "preset",
+        "spawn"
+      ],
+      "title": "Character",
+      "type": "object"
+    },
+    "Emotion": {
+      "enum": [
+        "neutral",
+        "joy",
+        "angry",
+        "sorrow",
+        "fun"
+      ],
+      "title": "Emotion",
+      "type": "string"
+    },
+    "FrownAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "frown",
+          "default": "frown",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "FrownAction",
+      "type": "object"
+    },
+    "IdleAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "idle",
+          "default": "idle",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "emotion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Emotion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "IdleAction",
+      "type": "object"
+    },
+    "LookAtAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "look_at",
+          "default": "look_at",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character",
+        "target"
+      ],
+      "title": "LookAtAction",
+      "type": "object"
+    },
+    "PointAtAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "point_at",
+          "default": "point_at",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character",
+        "target"
+      ],
+      "title": "PointAtAction",
+      "type": "object"
+    },
+    "SetLightingAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "set_lighting",
+          "default": "set_lighting",
+          "title": "Type",
+          "type": "string"
+        },
+        "preset": {
+          "minLength": 1,
+          "title": "Preset",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "preset"
+      ],
+      "title": "SetLightingAction",
+      "type": "object"
+    },
+    "Shot": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "camera": {
+          "minLength": 1,
+          "title": "Camera",
+          "type": "string"
+        },
+        "actions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "blink": "#/$defs/BlinkAction",
+                "camera_cut": "#/$defs/CameraCutAction",
+                "camera_dolly": "#/$defs/CameraDollyAction",
+                "frown": "#/$defs/FrownAction",
+                "idle": "#/$defs/IdleAction",
+                "look_at": "#/$defs/LookAtAction",
+                "point_at": "#/$defs/PointAtAction",
+                "set_lighting": "#/$defs/SetLightingAction",
+                "sit": "#/$defs/SitAction",
+                "smile": "#/$defs/SmileAction",
+                "stand": "#/$defs/StandAction",
+                "talk": "#/$defs/TalkAction",
+                "turn_to": "#/$defs/TurnToAction",
+                "walk_to": "#/$defs/WalkToAction"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/WalkToAction"
+              },
+              {
+                "$ref": "#/$defs/IdleAction"
+              },
+              {
+                "$ref": "#/$defs/TurnToAction"
+              },
+              {
+                "$ref": "#/$defs/LookAtAction"
+              },
+              {
+                "$ref": "#/$defs/PointAtAction"
+              },
+              {
+                "$ref": "#/$defs/SitAction"
+              },
+              {
+                "$ref": "#/$defs/StandAction"
+              },
+              {
+                "$ref": "#/$defs/SmileAction"
+              },
+              {
+                "$ref": "#/$defs/FrownAction"
+              },
+              {
+                "$ref": "#/$defs/BlinkAction"
+              },
+              {
+                "$ref": "#/$defs/TalkAction"
+              },
+              {
+                "$ref": "#/$defs/CameraCutAction"
+              },
+              {
+                "$ref": "#/$defs/CameraDollyAction"
+              },
+              {
+                "$ref": "#/$defs/SetLightingAction"
+              }
+            ]
+          },
+          "title": "Actions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "camera",
+        "actions"
+      ],
+      "title": "Shot",
+      "type": "object"
+    },
+    "SitAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "sit",
+          "default": "sit",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "SitAction",
+      "type": "object"
+    },
+    "SmileAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "smile",
+          "default": "smile",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "SmileAction",
+      "type": "object"
+    },
+    "StandAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "stand",
+          "default": "stand",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "StandAction",
+      "type": "object"
+    },
+    "TalkAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "talk",
+          "default": "talk",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "emotion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Emotion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "look_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Look At"
+        },
+        "gesture": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gesture"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character",
+        "text"
+      ],
+      "title": "TalkAction",
+      "type": "object"
+    },
+    "TurnToAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "turn_to",
+          "default": "turn_to",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character",
+        "target"
+      ],
+      "title": "TurnToAction",
+      "type": "object"
+    },
+    "WalkToAction": {
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "walk_to",
+          "default": "walk_to",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "emotion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Emotion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character",
+        "target"
+      ],
+      "title": "WalkToAction",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "project": {
+      "minLength": 1,
+      "title": "Project",
+      "type": "string"
+    },
+    "scene": {
+      "minLength": 1,
+      "title": "Scene",
+      "type": "string"
+    },
+    "characters": {
+      "items": {
+        "$ref": "#/$defs/Character"
+      },
+      "title": "Characters",
+      "type": "array"
+    },
+    "shots": {
+      "items": {
+        "$ref": "#/$defs/Shot"
+      },
+      "title": "Shots",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project",
+    "scene",
+    "characters",
+    "shots"
+  ],
+  "title": "Project",
+  "type": "object"
+}
