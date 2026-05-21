@@ -4,6 +4,6 @@
   "description": "A dimly-lit science lab with workbenches and computer terminals.",
   "blend_file": "scene.blend",
   "spawn_points": ["door", "center_room", "robot_station"],
-  "camera_presets": ["wide", "close_student", "close_robot"],
+  "camera_presets": ["wide", "close_student"],
   "lighting_presets": ["default", "dim", "emergency"]
 }

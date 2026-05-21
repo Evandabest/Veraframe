@@ -169,10 +169,12 @@ def build() -> None:
     # Camera south (-Y) of the character so we see their front (Mixamo's
     # natural facing is -Y). A small +X offset gives a 3/4-front angle
     # instead of dead head-on.
-    camera = _add_camera_looking_at(
-        "wide", location=(3.0, -8.0, 4.0), look_at=(0.0, 0.0, 1.0)
+    wide = _add_camera_looking_at("wide", location=(3.0, -8.0, 4.0), look_at=(0.0, 0.0, 1.0))
+    # Closer head-on camera for shot variation (camera_cut tests bind to this).
+    _add_camera_looking_at(
+        "close_student", location=(0.5, -3.5, 1.7), look_at=(0.0, 0.0, 1.6)
     )
-    bpy.context.scene.camera = camera
+    bpy.context.scene.camera = wide
 
 
 def _parse_output_arg() -> str:

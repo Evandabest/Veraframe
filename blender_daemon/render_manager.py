@@ -70,7 +70,18 @@ def render(
     scene.frame_start = int(start_frame)
     scene.frame_end = int(end_frame)
 
-    bpy.ops.render.render(animation=True)
+    # Manual per-frame render. `bpy.ops.render.render(animation=True)` does
+    # not reliably re-evaluate timeline markers between frames in
+    # --background mode. We iterate ourselves and explicitly resolve the
+    # active camera from markers (`_camera_at_frame`) and force
+    # `scene.camera` before each `write_still` so camera_cut actually
+    # switches mid-animation.
+    pad = 4
+    for frame in range(int(start_frame), int(end_frame) + 1):
+        scene.frame_set(frame)
+        scene.camera = _camera_at_frame(scene, frame, default=camera)
+        scene.render.filepath = str(frames_dir / f"{frame:0{pad}d}")
+        bpy.ops.render.render(write_still=True)
 
     png_files = sorted(frames_dir.glob("*.png"))
     if not png_files:
@@ -101,6 +112,20 @@ def render(
 
 
 # ---------------------------------------------------------------------------
+
+
+def _camera_at_frame(scene, frame: int, *, default):
+    """Return the camera bound to the closest marker at or before `frame`,
+    or `default` if no such marker exists."""
+    best_camera = default
+    best_frame = -(1 << 31)
+    for marker in scene.timeline_markers:
+        if marker.camera is None:
+            continue
+        if best_frame < marker.frame <= frame:
+            best_frame = marker.frame
+            best_camera = marker.camera
+    return best_camera
 
 
 def _ensure_camera(scene):

@@ -16,6 +16,7 @@ except ImportError:
     bpy = None
 
 from actions import blink as blink_action
+from actions import camera_cut as camera_cut_action
 from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
@@ -66,6 +67,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype in ("smile", "frown", "blink"):
                 _dispatch_emotion(action, characters, fps, executed, skipped)
+                continue
+
+            if atype == "camera_cut":
+                _dispatch_camera_cut(action, fps, executed, skipped)
                 continue
 
             skipped.append(
@@ -283,6 +288,30 @@ def _dispatch_emotion(
         return
 
     executed.append({"id": action_id, "type": atype, **result})
+
+
+def _dispatch_camera_cut(
+    action: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    camera_name = action.get("camera")
+    if not camera_name:
+        skipped.append({"id": action_id, "type": "camera_cut", "reason": "no camera name"})
+        return
+
+    start_frame = int(action["start"] * fps)
+    try:
+        result = camera_cut_action.execute(
+            bpy.context.scene, camera_name, start_frame, action_id=action_id
+        )
+    except camera_cut_action.CameraCutActionError as e:
+        skipped.append({"id": action_id, "type": "camera_cut", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "camera_cut", **result})
 
 
 def _index_characters_by_handle() -> dict:
