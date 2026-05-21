@@ -166,7 +166,7 @@ def test_prompt_section_lists_scene_details() -> None:
     section = r.to_system_prompt_section()
     assert "dark_lab" in section
     assert "door, center_room, robot_station" in section
-    assert "wide, close_student, close_robot" in section
+    assert "wide, close_student" in section
 
 
 def test_prompt_section_marks_optional_params() -> None:

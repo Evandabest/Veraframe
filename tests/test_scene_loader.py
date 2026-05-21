@@ -42,7 +42,7 @@ def test_real_load_scene_returns_expected_inventory() -> None:
         result = h.call("load_scene", blend_path=SCENE_PATH)
 
     assert sorted(result["spawn_points"]) == ["center_room", "door", "robot_station"]
-    assert result["cameras"] == ["wide"]
+    assert result["cameras"] == ["close_student", "wide"]
     assert result["scene_name"]
     assert result["object_count"] >= 4  # 3 empties + 1 camera at minimum
 
