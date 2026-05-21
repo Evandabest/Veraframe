@@ -22,6 +22,7 @@ from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
 from actions import point_at as point_at_action
+from actions import set_lighting as set_lighting_action
 from actions import smile as smile_action
 from actions import turn_to as turn_to_action
 from actions import walk_to as walk_to_action
@@ -86,6 +87,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "camera_dolly":
                 _dispatch_camera_dolly(action, fps, executed, skipped)
+                continue
+
+            if atype == "set_lighting":
+                _dispatch_set_lighting(action, fps, executed, skipped)
                 continue
 
             skipped.append(
@@ -462,6 +467,33 @@ def _dispatch_camera_dolly(
         return
 
     executed.append({"id": action_id, "type": "camera_dolly", **result})
+
+
+def _dispatch_set_lighting(
+    action: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    preset = action.get("preset")
+    if not preset:
+        skipped.append(
+            {"id": action_id, "type": "set_lighting", "reason": "preset is required"}
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = set_lighting_action.execute(
+            bpy.context.scene, preset, start_frame, end_frame, action_id=action_id
+        )
+    except set_lighting_action.SetLightingActionError as e:
+        skipped.append({"id": action_id, "type": "set_lighting", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "set_lighting", **result})
 
 
 def _index_characters_by_handle() -> dict:
