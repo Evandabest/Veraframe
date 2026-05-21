@@ -148,17 +148,16 @@ def test_real_idle_missing_asset_path_skips_gracefully() -> None:
 
 
 @needs_blender
-def test_real_other_actions_in_timeline_are_skipped() -> None:
+def test_real_unknown_action_type_is_skipped() -> None:
     from planner import daemon_runner
 
     timeline = _idle_timeline(0, 2)
-    # Add a not-yet-implemented action alongside the idle.
+    # Synthetic unknown action type — exercises the executor's fallthrough.
     timeline["shots"][0]["actions"].append(
         {
             "id": "a2",
-            "type": "turn_to",
+            "type": "fly_to_moon",
             "character": "student",
-            "target": "center_room",
             "start": 0,
             "end": 2,
         }
@@ -181,4 +180,5 @@ def test_real_other_actions_in_timeline_are_skipped() -> None:
     assert len(result["executed"]) == 1
     assert result["executed"][0]["id"] == "a1"
     assert len(result["skipped"]) == 1
-    assert result["skipped"][0]["type"] == "turn_to"
+    assert result["skipped"][0]["type"] == "fly_to_moon"
+    assert "not yet implemented" in result["skipped"][0]["reason"]
