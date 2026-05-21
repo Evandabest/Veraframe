@@ -16,6 +16,7 @@ except ImportError:
     bpy = None
 
 from actions import idle as idle_action
+from actions import look_at as look_at_action
 from actions import walk_to as walk_to_action
 
 
@@ -54,6 +55,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "walk_to":
                 _dispatch_walk_to(action, characters, asset_paths, fps, executed, skipped)
+                continue
+
+            if atype == "look_at":
+                _dispatch_look_at(action, characters, fps, executed, skipped)
                 continue
 
             skipped.append(
@@ -182,6 +187,55 @@ def _dispatch_walk_to(
         return
 
     executed.append({"id": action_id, "type": "walk_to", **result})
+
+
+def _dispatch_look_at(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "look_at",
+                "reason": f"character '{char_id}' not loaded (no armature with that handle)",
+            }
+        )
+        return
+
+    target_name = action.get("target")
+    scene = bpy.context.scene
+    target_obj = scene.objects.get(target_name) if target_name else None
+    if target_obj is None and target_name in characters:
+        target_obj = characters[target_name]
+    if target_obj is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "look_at",
+                "reason": f"target '{target_name}' not found as spawn point or character",
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+
+    try:
+        result = look_at_action.execute(
+            armature, target_obj, start_frame, end_frame, action_id=action_id
+        )
+    except look_at_action.LookAtActionError as e:
+        skipped.append({"id": action_id, "type": "look_at", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "look_at", **result})
 
 
 def _index_characters_by_handle() -> dict:
