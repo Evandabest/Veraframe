@@ -7,6 +7,7 @@ import { startDaemon, type DaemonHandle } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
 import { buildMockTimeline } from './mock'
 import { runTimeline, type RenderResult } from './render'
+import { runPlanner, resolveRepoRoot } from './planner'
 
 let daemonHandle: DaemonHandle | null = null
 let assets: AssetRegistry | null = null
@@ -132,7 +133,10 @@ app.whenReady().then(async () => {
       if (request.mode === 'mock') {
         timeline = buildMockTimeline(assets, request.durationSec ?? 8)
       } else {
-        return { ok: false, error: 'LLM mode is not implemented yet' }
+        if (!request.prompt || !request.prompt.trim()) {
+          return { ok: false, error: 'LLM mode requires a prompt' }
+        }
+        timeline = await runPlanner(request.prompt, resolveRepoRoot(), assets.assetsDir)
       }
       const result: RenderResult = await runTimeline(daemonHandle, assets, timeline)
       renderedVideos.set(result.renderId, result.videoPath)
