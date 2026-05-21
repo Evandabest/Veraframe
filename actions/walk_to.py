@@ -74,13 +74,10 @@ def execute(
         armature.location[axis_index] = end_loc[axis_index]
         armature.keyframe_insert(data_path="location", index=axis_index, frame=int(end_frame))
 
-    # Force linear interpolation on the location keyframes (default is bezier,
-    # which produces ease-in/out — not what a walk should look like).
-    if armature.animation_data.action is not None:
-        for fcurve in armature.animation_data.action.fcurves:
-            if fcurve.data_path == "location":
-                for kp in fcurve.keyframe_points:
-                    kp.interpolation = "LINEAR"
+    # NOTE: Bezier interp on the location keyframes gives ease-in/ease-out,
+    # which actually reads well for a short walk (accelerates from rest,
+    # decelerates to stop). Blender 5.x's slotted-action API makes flipping
+    # to linear non-trivial; revisit if walk motion looks too floaty.
 
     # Face the direction of travel (horizontal component only).
     import mathutils
