@@ -102,6 +102,7 @@ def test_real_idle_places_nla_strip() -> None:
     assert placed["track"] == "veraframe_idle_a1"
     assert placed["frame_start"] == 0
     assert placed["frame_end"] == 48  # 2s × 24fps
+    assert placed["extrapolation"] == "NOTHING"
     assert result["skipped"] == []
 
 

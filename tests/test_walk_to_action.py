@@ -104,6 +104,7 @@ needs_blender = pytest.mark.skipif(
 SCENE_PATH = str(Path("assets/scenes/dark_lab/scene.blend").resolve())
 CHAR_PATH = str(Path("assets/characters/student_v1/character.fbx").resolve())
 WALK_PATH = str(Path("assets/animations/walk_in_place/walk_in_place.fbx").resolve())
+IDLE_PATH = str(Path("assets/animations/idle/animation.fbx").resolve())
 
 
 def _walk_timeline(target: str, start: float = 0.0, end: float = 2.0) -> dict:
@@ -149,6 +150,7 @@ def test_real_walk_to_places_strip_and_translation() -> None:
     assert placed["end_location"] == [0.0, -3.0, 0.0]  # robot_station
     assert placed["track"] == "veraframe_walk_a1"
     assert placed["frame_start"] == 0
+    assert placed["extrapolation"] == "NOTHING"
     # The walk cycle must repeat enough times to span the requested duration,
     # otherwise the leg animation freezes and the character slides. Walking
     # is ~32 frames; a 4-second (96-frame) walk needs ~3 cycles.
@@ -170,3 +172,71 @@ def test_real_walk_to_unknown_target_skips() -> None:
 
     assert result["executed"] == []
     assert "not found" in result["skipped"][0]["reason"]
+
+
+@needs_blender
+def test_real_walk_then_idle_body_strips_do_not_hold_backwards() -> None:
+    """A later idle must not hold its first pose backward over a walk."""
+    from planner import daemon_runner
+
+    timeline = _walk_timeline("center_room", 0, 4)
+    timeline["shots"][0]["end"] = 6
+    timeline["shots"][0]["actions"].append(
+        {
+            "id": "a2",
+            "type": "idle",
+            "character": "student",
+            "start": 4,
+            "end": 6,
+        }
+    )
+
+    with daemon_runner.daemon() as h:
+        h.call("load_scene", blend_path=SCENE_PATH)
+        h.call("load_character", fbx_path=CHAR_PATH, spawn_point="door", handle="student")
+        result = h.call(
+            "execute_timeline",
+            timeline=timeline,
+            asset_paths={"walk_in_place": WALK_PATH, "idle": IDLE_PATH},
+        )
+
+    assert result["skipped"] == []
+    by_id = {entry["id"]: entry for entry in result["executed"]}
+    assert by_id["a1"]["type"] == "walk_to"
+    assert by_id["a1"]["extrapolation"] == "NOTHING"
+    assert by_id["a2"]["type"] == "idle"
+    assert by_id["a2"]["extrapolation"] == "NOTHING"
+
+
+@needs_blender
+def test_real_sequential_walks_start_from_previous_target() -> None:
+    from planner import daemon_runner
+
+    timeline = _walk_timeline("robot_station", 0, 4)
+    timeline["shots"][0]["end"] = 8
+    timeline["shots"][0]["actions"].append(
+        {
+            "id": "a2",
+            "type": "walk_to",
+            "character": "student",
+            "target": "center_room",
+            "start": 4,
+            "end": 8,
+        }
+    )
+
+    with daemon_runner.daemon() as h:
+        h.call("load_scene", blend_path=SCENE_PATH)
+        h.call("load_character", fbx_path=CHAR_PATH, spawn_point="door", handle="student")
+        result = h.call(
+            "execute_timeline",
+            timeline=timeline,
+            asset_paths={"walk_in_place": WALK_PATH},
+        )
+
+    assert result["skipped"] == []
+    by_id = {entry["id"]: entry for entry in result["executed"]}
+    assert by_id["a1"]["start_location"] == [0.0, 5.0, 0.0]
+    assert by_id["a1"]["end_location"] == [0.0, -3.0, 0.0]
+    assert by_id["a2"]["start_location"] == [0.0, -3.0, 0.0]
+    assert by_id["a2"]["end_location"] == [0.0, 0.0, 0.0]

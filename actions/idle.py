@@ -61,13 +61,17 @@ def execute(
             strip.action_slot_handle = action.slots[0].handle
 
     strip.frame_end = int(end_frame)
-    strip.extrapolation = "HOLD"
+    # Keep body strips confined to their action window. HOLD extrapolates the
+    # first pose backward before the strip start, so a later idle can mask an
+    # earlier walk and make the character slide in a frozen stance.
+    strip.extrapolation = "NOTHING"
 
     return {
         "armature": armature.name,
         "track": track.name,
         "frame_start": int(strip.frame_start),
         "frame_end": int(strip.frame_end),
+        "extrapolation": strip.extrapolation,
         "action_name": action.name,
     }
 

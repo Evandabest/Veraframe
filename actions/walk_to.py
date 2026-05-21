@@ -21,6 +21,7 @@ class WalkToActionError(RuntimeError):
 
 
 _LOADED_ACTIONS: dict[str, object] = {}
+_EFFECTIVE_LOCATION_PROP = "veraframe_effective_location"
 
 
 def execute(
@@ -33,9 +34,8 @@ def execute(
 ) -> dict:
     """Walk `armature` from its current location to `target_location`.
 
-    Places the walk NLA strip (so the legs cycle) and keyframes
-    `armature.location` linearly from current → target over the frame range.
-    Also rotates the armature so it faces the direction of travel.
+    Places the walk NLA strip (so the legs cycle) and drives armature
+    location linearly from current → target over the frame range.
     """
     if bpy is None:
         raise WalkToActionError("bpy unavailable")
@@ -46,10 +46,45 @@ def execute(
         armature.animation_data_create()
 
     # Note: the FBX T-pose was cleared once in `character_loader.load_character`.
-    # We rely on Blender to auto-create `animation_data.action` when
-    # keyframe_insert below runs — that auto-created action holds our
-    # location keyframes for the duration of the walk.
 
+    stored_start = armature.get(_EFFECTIVE_LOCATION_PROP)
+    if stored_start is not None and len(stored_start) == 3:
+        start_loc = tuple(float(v) for v in stored_start)
+        loc_action_start = (0.0, 0.0, 0.0)
+        loc_action_end = tuple(float(target_location[i]) - start_loc[i] for i in range(3))
+    else:
+        start_loc = tuple(armature.location)
+        loc_action_start = start_loc
+        loc_action_end = tuple(target_location)
+    end_loc = tuple(target_location)
+
+    # Build the translation action on a temporary object rather than by
+    # assigning `armature.animation_data.action`. A generic object-location
+    # action can be reused as an NLA strip on the armature without disturbing
+    # any direct-action/tweak-slot state owned by other actions.
+    loc_action = _make_location_action(
+        action_id=action_id,
+        start_loc=loc_action_start,
+        end_loc=loc_action_end,
+        start_frame=int(start_frame),
+        end_frame=int(end_frame),
+    )
+
+    loc_track = armature.animation_data.nla_tracks.new()
+    loc_track.name = f"veraframe_walk_loc_{action_id}"
+    loc_strip = loc_track.strips.new(
+        name=f"loc_{action_id}", start=int(start_frame), action=loc_action
+    )
+    loc_strip.blend_type = "ADD"
+    loc_strip.extrapolation = "HOLD"
+
+    # Clear the live static value so ADD blend computes absolute location
+    # from the strip (base 0 + curve).
+    armature.location = (0.0, 0.0, 0.0)
+
+    # Create the imported body strip separately from the root-translation
+    # strip. Root motion holds position after the walk; body motion should only
+    # affect frames inside the walk window.
     track = armature.animation_data.nla_tracks.new()
     track.name = f"veraframe_walk_{action_id}"
 
@@ -64,54 +99,16 @@ def execute(
 
     # The Walking clip is ~32 frames (~1.3s @24fps). For a multi-second walk
     # we need the cycle to loop, otherwise the legs freeze at the last frame
-    # while our location keyframes slide the character — that's the "sliding"
-    # look. Set `repeat` to span the requested duration. We deliberately do
-    # NOT touch `strip.frame_end` because assigning frame_end resets repeat
-    # back to 1.0 in Blender 5.x.
+    # while our location keyframes slide the character. Set `repeat` to span
+    # the requested duration. We deliberately do NOT touch `strip.frame_end`
+    # because assigning frame_end resets repeat back to 1.0 in Blender 5.x.
     action_length = max(1.0, action.frame_range[1] - action.frame_range[0])
     desired_duration = max(1.0, int(end_frame) - int(start_frame))
     strip.repeat = desired_duration / action_length
-    strip.extrapolation = "HOLD"
-
-    # CRITICAL: walk_to keyframes `armature.location` via `keyframe_insert`,
-    # which APPENDS to whatever action is currently in `animation_data.action`
-    # (the "tweak slot"). If a previous action (e.g. look_at's constraint
-    # influence keyframes) already lives there, our location keyframes get
-    # mixed in — and when we push that combined action to NLA, the strip's
-    # frame mapping drifts (action frame range starts at the earliest
-    # keyframe across BOTH actions, not at our location keyframes), AND the
-    # leftover tweak slot continues to mask bone channels.
-    #
-    # Solution: temporarily swap in a dedicated empty action, do the
-    # location keyframes there, push to its own NLA track with ADD blend
-    # (so bone channels pass through), then restore the previous tweak
-    # action so other channels (like look_at's constraint influence) keep
-    # working.
-    start_loc = tuple(armature.location)
-    end_loc = tuple(target_location)
-
-    prev_tweak = armature.animation_data.action
-    loc_action = bpy.data.actions.new(name=f"veraframe_walk_loc_{action_id}_a")
-    armature.animation_data.action = loc_action
-
-    for axis_index in range(3):
-        armature.location[axis_index] = start_loc[axis_index]
-        armature.keyframe_insert(data_path="location", index=axis_index, frame=int(start_frame))
-        armature.location[axis_index] = end_loc[axis_index]
-        armature.keyframe_insert(data_path="location", index=axis_index, frame=int(end_frame))
-
-    loc_track = armature.animation_data.nla_tracks.new()
-    loc_track.name = f"veraframe_walk_loc_{action_id}"
-    loc_strip = loc_track.strips.new(
-        name=f"loc_{action_id}", start=int(start_frame), action=loc_action
-    )
-    loc_strip.blend_type = "ADD"
-    loc_strip.extrapolation = "HOLD"
-
-    # Restore the previous tweak action and clear the live static value so
-    # ADD blend computes absolute location from the strip (base 0 + curve).
-    armature.animation_data.action = prev_tweak
-    armature.location = (0.0, 0.0, 0.0)
+    # The translation strip below holds world position after the walk. The
+    # body strip itself must not hold outside the walk window, or it can mask
+    # subsequent body actions on overlapping NLA evaluation.
+    strip.extrapolation = "NOTHING"
 
     # Don't rotate the armature to face the direction of travel. Same reason
     # as in `character_loader.load_character`: setting `rotation_quaternion`
@@ -127,6 +124,7 @@ def execute(
     # apparent world position is driven entirely by the strip during the walk
     # and held at the strip's last value afterward (extrapolation = HOLD).
     # The "current location" for subsequent walk_to chaining is end_loc.
+    armature[_EFFECTIVE_LOCATION_PROP] = list(end_loc)
 
     return {
         "armature": armature.name,
@@ -134,10 +132,35 @@ def execute(
         "frame_start": int(strip.frame_start),
         "frame_end": int(strip.frame_end),
         "repeat": strip.repeat,
+        "extrapolation": strip.extrapolation,
         "action_name": action.name,
         "start_location": list(start_loc),
         "end_location": list(end_loc),
     }
+
+
+def _make_location_action(
+    *,
+    action_id: str,
+    start_loc: tuple[float, float, float],
+    end_loc: tuple[float, float, float],
+    start_frame: int,
+    end_frame: int,
+):
+    loc_action = bpy.data.actions.new(name=f"veraframe_walk_loc_{action_id}_a")
+    dummy = bpy.data.objects.new(f"veraframe_walk_loc_source_{action_id}", None)
+    bpy.context.scene.collection.objects.link(dummy)
+    try:
+        dummy.animation_data_create()
+        dummy.animation_data.action = loc_action
+        for axis_index in range(3):
+            dummy.location[axis_index] = start_loc[axis_index]
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=start_frame)
+            dummy.location[axis_index] = end_loc[axis_index]
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=end_frame)
+    finally:
+        bpy.data.objects.remove(dummy, do_unlink=True)
+    return loc_action
 
 
 def _load_action(fbx_path: str):
