@@ -99,6 +99,15 @@ def load_character(
 
     armature.location = spawn_location
 
+    # FBX import auto-assigns the embedded T-pose to `animation_data.action`.
+    # That direct action overrides NLA strips in Blender's eval order, so we
+    # clear it once at load time. Subsequent actions don't need to touch this
+    # — and importantly MUST NOT, because some actions (walk_to) keyframe
+    # location data into a freshly-created action that another action
+    # clearing `animation_data.action` would orphan.
+    if armature.animation_data is not None:
+        armature.animation_data.action = None
+
     # Face the active scene camera by default. Mixamo characters in Blender
     # import with the Y-up → Z-up conversion baked into the armature's
     # rotation (usually as a quaternion), so directly setting rotation_euler

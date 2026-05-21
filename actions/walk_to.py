@@ -45,9 +45,10 @@ def execute(
     if armature.animation_data is None:
         armature.animation_data_create()
 
-    # Same fix as idle.py: clear the FBX-imported direct action so the NLA
-    # strip's bone keyframes aren't overridden.
-    armature.animation_data.action = None
+    # Note: the FBX T-pose was cleared once in `character_loader.load_character`.
+    # We rely on Blender to auto-create `animation_data.action` when
+    # keyframe_insert below runs — that auto-created action holds our
+    # location keyframes for the duration of the walk.
 
     track = armature.animation_data.nla_tracks.new()
     track.name = f"veraframe_walk_{action_id}"
