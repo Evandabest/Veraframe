@@ -84,13 +84,14 @@ def execute(
     # decelerates to stop). Blender 5.x's slotted-action API makes flipping
     # to linear non-trivial; revisit if walk motion looks too floaty.
 
-    # Face the direction of travel (horizontal component only).
-    import mathutils
-
-    direction = mathutils.Vector(end_loc) - mathutils.Vector(start_loc)
-    direction.z = 0
-    if direction.length > 1e-6:
-        armature.rotation_euler = direction.to_track_quat("Y", "Z").to_euler()
+    # Don't rotate the armature to face the direction of travel. Same reason
+    # as in `character_loader.load_character`: setting `rotation_quaternion`
+    # on the armature object causes the Mixamo walk action's bone keyframes
+    # to behave unexpectedly (the character ends up tilted flat or the bones
+    # cancel out the object rotation, depending on the axis chosen). Scenes
+    # are expected to place the camera so that the natural Mixamo facing
+    # (+Y world) reads well; the character moonwalks sideways if the route
+    # is not aligned with +Y. Better facing handling is a follow-up.
 
     # Leave armature.location at end_loc so subsequent actions see the new
     # position as the "current" location.
