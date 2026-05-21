@@ -1,16 +1,33 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-// Custom APIs for renderer
-const api = {}
+export interface RenderRequest {
+  mode: 'mock' | 'llm'
+  prompt?: string
+  durationSec?: number
+}
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
+export type RenderResponse =
+  | {
+      ok: true
+      renderId: string
+      videoUrl: string
+      durationSec: number
+      executed: number
+      skipped: number
+    }
+  | { ok: false; error: string }
+
+/** API surface exposed on `window.veraframe` for the React renderer. */
+const veraframe = {
+  render: (request: RenderRequest): Promise<RenderResponse> =>
+    ipcRenderer.invoke('render', request)
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
+    contextBridge.exposeInMainWorld('veraframe', veraframe)
   } catch (error) {
     console.error(error)
   }
@@ -18,5 +35,7 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.electron = electronAPI
   // @ts-ignore (define in dts)
-  window.api = api
+  window.veraframe = veraframe
 }
+
+export type Veraframe = typeof veraframe
