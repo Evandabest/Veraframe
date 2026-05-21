@@ -1,10 +1,52 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { startDaemon, type DaemonHandle } from './daemon'
+import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
+import { buildMockTimeline } from './mock'
+import { runTimeline, type RenderResult } from './render'
 
 let daemonHandle: DaemonHandle | null = null
+let assets: AssetRegistry | null = null
+
+/**
+ * Map of renderId → MP4 path on disk. The custom `veraframe-render://` protocol
+ * resolves URLs against this map so the renderer can play the file without
+ * needing direct filesystem access.
+ */
+const renderedVideos = new Map<string, string>()
+
+export interface RenderRequest {
+  mode: 'mock' | 'llm'
+  prompt?: string
+  durationSec?: number
+}
+
+interface RenderSuccess {
+  ok: true
+  renderId: string
+  videoUrl: string
+  durationSec: number
+  executed: number
+  skipped: number
+}
+
+interface RenderFailure {
+  ok: false
+  error: string
+}
+
+type RenderResponse = RenderSuccess | RenderFailure
+
+// Custom protocol must be registered before app.whenReady().
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'veraframe-render',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
 
 function createWindow(): void {
   // Create the browser window.
@@ -50,6 +92,29 @@ app.whenReady().then(async () => {
 
   ipcMain.on('ping', () => console.log('pong'))
 
+  // Serve rendered MP4s under veraframe-render://<id>/video.mp4
+  protocol.handle('veraframe-render', (request) => {
+    const url = new URL(request.url)
+    const renderId = url.hostname
+    const filePath = renderedVideos.get(renderId)
+    if (!filePath) {
+      return new Response('not found', { status: 404 })
+    }
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
+
+  // Load asset registry — used to build mock timelines and resolve fbx paths.
+  try {
+    assets = loadAssets(resolveAssetsDir())
+    console.log(
+      `Assets loaded: ${Object.keys(assets.scenes).length} scene(s), ` +
+        `${Object.keys(assets.characters).length} character(s), ` +
+        `${Object.keys(assets.animations).length} animation(s)`
+    )
+  } catch (err) {
+    console.error('Asset load failed:', err)
+  }
+
   // Spawn the long-lived Blender daemon. If it fails, the app still opens —
   // the render handlers will surface the error to the renderer.
   try {
@@ -58,6 +123,31 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error('Blender daemon failed to start:', err)
   }
+
+  ipcMain.handle('render', async (_event, request: RenderRequest): Promise<RenderResponse> => {
+    if (!daemonHandle) return { ok: false, error: 'Blender daemon is not running' }
+    if (!assets) return { ok: false, error: 'asset registry not loaded' }
+    try {
+      let timeline: Record<string, unknown>
+      if (request.mode === 'mock') {
+        timeline = buildMockTimeline(assets, request.durationSec ?? 8)
+      } else {
+        return { ok: false, error: 'LLM mode is not implemented yet' }
+      }
+      const result: RenderResult = await runTimeline(daemonHandle, assets, timeline)
+      renderedVideos.set(result.renderId, result.videoPath)
+      return {
+        ok: true,
+        renderId: result.renderId,
+        videoUrl: `veraframe-render://${result.renderId}/video.mp4`,
+        durationSec: result.durationSec,
+        executed: result.executed,
+        skipped: result.skipped
+      }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
 
   createWindow()
 
