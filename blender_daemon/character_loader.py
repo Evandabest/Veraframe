@@ -108,31 +108,13 @@ def load_character(
     if armature.animation_data is not None:
         armature.animation_data.action = None
 
-    # Face the active scene camera by default. Mixamo characters in Blender
-    # import with the Y-up → Z-up conversion baked into the armature's
-    # rotation (usually as a quaternion), so directly setting rotation_euler
-    # has no effect — we have to compose a world-Z yaw quaternion onto whatever
-    # mode the importer used.
-    camera = scene.camera or next(
-        (obj for obj in scene.objects if obj.type == "CAMERA"), None
-    )
-    if camera is not None:
-        import math
-
-        import mathutils
-
-        dx = camera.location.x - spawn_location[0]
-        dy = camera.location.y - spawn_location[1]
-        if dx * dx + dy * dy > 1e-12:
-            # Mixamo characters' natural forward in world space is -Y. Solve
-            # for the yaw θ around world Z that aligns -Y with (dx, dy):
-            #   -Y rotated by θ = (sin θ, -cos θ) = (dx, dy)/length
-            yaw = math.atan2(dx, -dy)
-            yaw_quat = mathutils.Quaternion((0.0, 0.0, 1.0), yaw)
-            # Preserve the importer's Y-up → Z-up rotation by composing on top.
-            current_quat = armature.matrix_basis.to_quaternion()
-            armature.rotation_mode = "QUATERNION"
-            armature.rotation_quaternion = yaw_quat @ current_quat
+    # NOTE: We DO NOT rotate the armature to face the camera. Mixamo walk/idle
+    # actions include bone-level rotations on the Hips that interact badly
+    # with any non-identity object rotation — the bones effectively cancel
+    # the object yaw, leaving the character in rest pose during animation.
+    # Instead, scenes are expected to position the camera on the +Y side of
+    # the character's spawn point (Mixamo's natural facing direction). See
+    # `assets/scenes/dark_lab/build.py`.
 
     if handle is None:
         existing_handles = {

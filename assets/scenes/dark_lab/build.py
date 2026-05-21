@@ -160,9 +160,12 @@ def build() -> None:
     for name, loc in EMPTY_LOCATIONS.items():
         _add_empty(name, loc)
 
-    # Camera looking at center_room from a back-right diagonal.
+    # Camera on the +Y side of the character (Mixamo's natural facing
+    # direction) so the character's front is visible during idle/walk
+    # without any armature rotation gymnastics. Slight X offset for a
+    # 3/4-front angle instead of dead head-on.
     camera = _add_camera_looking_at(
-        "wide", location=(6.0, -8.0, 4.0), look_at=(0.0, 0.0, 1.0)
+        "wide", location=(-3.0, 8.0, 4.0), look_at=(0.0, 0.0, 1.0)
     )
     bpy.context.scene.camera = camera
 
