@@ -54,9 +54,13 @@ def execute(
     track.name = f"veraframe_walk_{action_id}"
 
     strip = track.strips.new(name=action_id, start=int(start_frame), action=action)
-    if hasattr(strip, "action_slot") and hasattr(action, "slots") and len(action.slots):
-        if strip.action_slot is None:
-            strip.action_slot = action.slots[0]
+    # Force-rebind the strip's slot (and its handle). See idle.py for context:
+    # auto-binding by `strips.new` picks up a stale slot handle that silently
+    # makes bone-rotation channels evaluate as no-ops.
+    if hasattr(action, "slots") and len(action.slots):
+        strip.action_slot = action.slots[0]
+        if hasattr(strip, "action_slot_handle"):
+            strip.action_slot_handle = action.slots[0].handle
 
     # The Walking clip is ~32 frames (~1.3s @24fps). For a multi-second walk
     # we need the cycle to loop, otherwise the legs freeze at the last frame

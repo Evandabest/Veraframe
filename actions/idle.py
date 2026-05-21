@@ -50,12 +50,15 @@ def execute(
 
     strip = track.strips.new(name=action_id, start=int(start_frame), action=action)
 
-    # In Blender 5.x slotted-action world, bind the strip to the first slot of
-    # the action if it isn't already bound. The slot is what carries the
-    # f-curve targets.
-    if hasattr(strip, "action_slot") and hasattr(action, "slots") and len(action.slots):
-        if strip.action_slot is None:
-            strip.action_slot = action.slots[0]
+    # Blender 5.x slotted actions: explicitly bind the strip to the action's
+    # first slot AND update the slot handle. `strips.new()` auto-binds but
+    # often picks up a stale handle from the most-recently-created slot in
+    # `bpy.data`, which makes the strip silently evaluate as a no-op even
+    # though the action and `action_slot` look right. Force-rebind below.
+    if hasattr(action, "slots") and len(action.slots):
+        strip.action_slot = action.slots[0]
+        if hasattr(strip, "action_slot_handle"):
+            strip.action_slot_handle = action.slots[0].handle
 
     strip.frame_end = int(end_frame)
     strip.extrapolation = "HOLD"
