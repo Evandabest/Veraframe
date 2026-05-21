@@ -70,6 +70,9 @@ def execute(
     strip.extrapolation = "HOLD"
 
     # Translation F-curve: keyframe current location at start_frame, target at end_frame.
+    # `armature.keyframe_insert` will auto-create an action and assign it to
+    # `animation_data.action` (the "tweak" slot). We need to move that action
+    # off the tweak slot onto its own NLA track — see comment below.
     start_loc = tuple(armature.location)
     end_loc = tuple(target_location)
 
@@ -79,10 +82,23 @@ def execute(
         armature.location[axis_index] = end_loc[axis_index]
         armature.keyframe_insert(data_path="location", index=axis_index, frame=int(end_frame))
 
-    # NOTE: Bezier interp on the location keyframes gives ease-in/ease-out,
-    # which actually reads well for a short walk (accelerates from rest,
-    # decelerates to stop). Blender 5.x's slotted-action API makes flipping
-    # to linear non-trivial; revisit if walk motion looks too floaty.
+    # CRITICAL: the auto-created action assigned to `animation_data.action`
+    # acts as Blender's "tweak action" — its slot (OBSlot for armatures)
+    # claims every channel in the slot, including pose-bone rotations the
+    # action has no keyframes for. In REPLACE blend mode the tweak slot
+    # forces unclaimed channels to rest pose, which silently suppresses
+    # the walk NLA strip's bone rotations and leaves the legs frozen while
+    # only translation animates. Fix: push the location action onto its
+    # own NLA track and unassign it from the tweak slot, so the location
+    # animates independently and the walk strip's bone rotations apply.
+    loc_action = armature.animation_data.action
+    if loc_action is not None:
+        loc_track = armature.animation_data.nla_tracks.new()
+        loc_track.name = f"veraframe_walk_loc_{action_id}"
+        loc_track.strips.new(
+            name=f"loc_{action_id}", start=int(start_frame), action=loc_action
+        )
+        armature.animation_data.action = None
 
     # Don't rotate the armature to face the direction of travel. Same reason
     # as in `character_loader.load_character`: setting `rotation_quaternion`

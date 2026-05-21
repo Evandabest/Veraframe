@@ -166,6 +166,18 @@ def build() -> None:
     for name, loc in EMPTY_LOCATIONS.items():
         _add_empty(name, loc)
 
+    # Visible markers at spawn points so the scene reads as more than an
+    # empty room. Empties themselves don't render — these are companion
+    # geometry placed at the same locations.
+    _add_box("Door_Frame", size=2.0, location=(0.0, 5.0, 1.0), scale=(0.8, 0.15, 1.0))
+    _add_box("Robot_Station", size=2.0, location=(0.0, -3.0, 0.35), scale=(0.6, 0.6, 0.35))
+
+    # Off-axis reference object for look_at demos that need a clean side
+    # turn (90° or so). Both "door" and "robot_station" lie on the Y axis,
+    # so any look_at between them is either dead-ahead or 180°-behind from
+    # the character's natural facing.
+    _add_empty("side_target", (4.0, -1.0, 1.6))
+
     # Camera south (-Y) of the character so we see their front (Mixamo's
     # natural facing is -Y). A small +X offset gives a 3/4-front angle
     # instead of dead head-on.
