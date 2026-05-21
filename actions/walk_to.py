@@ -57,12 +57,16 @@ def execute(
     if hasattr(strip, "action_slot") and hasattr(action, "slots") and len(action.slots):
         if strip.action_slot is None:
             strip.action_slot = action.slots[0]
-    strip.frame_end = int(end_frame)
-    strip.repeat = max(
-        1.0,
-        (int(end_frame) - int(start_frame))
-        / max(1.0, action.frame_range[1] - action.frame_range[0]),
-    )
+
+    # The Walking clip is ~32 frames (~1.3s @24fps). For a multi-second walk
+    # we need the cycle to loop, otherwise the legs freeze at the last frame
+    # while our location keyframes slide the character — that's the "sliding"
+    # look. Set `repeat` to span the requested duration. We deliberately do
+    # NOT touch `strip.frame_end` because assigning frame_end resets repeat
+    # back to 1.0 in Blender 5.x.
+    action_length = max(1.0, action.frame_range[1] - action.frame_range[0])
+    desired_duration = max(1.0, int(end_frame) - int(start_frame))
+    strip.repeat = desired_duration / action_length
     strip.extrapolation = "HOLD"
 
     # Translation F-curve: keyframe current location at start_frame, target at end_frame.
@@ -97,6 +101,7 @@ def execute(
         "track": track.name,
         "frame_start": int(strip.frame_start),
         "frame_end": int(strip.frame_end),
+        "repeat": strip.repeat,
         "action_name": action.name,
         "start_location": list(start_loc),
         "end_location": list(end_loc),

@@ -149,7 +149,10 @@ def test_real_walk_to_places_strip_and_translation() -> None:
     assert placed["end_location"] == [3.0, 0.0, 0.0]  # robot_station
     assert placed["track"] == "veraframe_walk_a1"
     assert placed["frame_start"] == 0
-    assert placed["frame_end"] == 96  # 4s × 24fps
+    # The walk cycle must repeat enough times to span the requested duration,
+    # otherwise the leg animation freezes and the character slides. Walking
+    # is ~32 frames; a 4-second (96-frame) walk needs ~3 cycles.
+    assert placed["repeat"] >= 2.5, f"walk did not loop enough times: repeat={placed['repeat']}"
 
 
 @needs_blender
