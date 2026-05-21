@@ -1,0 +1,169 @@
+"""Tests for the walk_to action and its dispatch.
+
+Unit tests cover the dispatch error paths (missing character, missing target,
+missing asset path). Integration tests run against real Blender 5.1.2.
+"""
+
+import os
+from pathlib import Path
+
+import pytest
+
+from blender_daemon import action_executor
+
+# --- Unit (no Blender) --------------------------------------------------------
+
+
+def test_walk_to_unknown_target_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If the target name resolves to no object, walk_to is skipped cleanly."""
+    fake_scene = type("S", (), {"objects": {}, "name": "fake"})()
+    fake_bpy = type(
+        "B",
+        (),
+        {
+            "context": type("C", (), {"scene": fake_scene})(),
+            "data": type("D", (), {"objects": []})(),
+        },
+    )
+    monkeypatch.setattr(action_executor, "bpy", fake_bpy)
+    timeline = {
+        "shots": [
+            {
+                "actions": [
+                    {
+                        "id": "a1",
+                        "type": "walk_to",
+                        "character": "student",
+                        "target": "nowhere",
+                        "start": 0,
+                        "end": 2,
+                    }
+                ]
+            }
+        ]
+    }
+    # Stub the _index_characters_by_handle helper to return a fake character.
+    monkeypatch.setattr(
+        action_executor, "_index_characters_by_handle", lambda: {"student": object()}
+    )
+    result = action_executor.execute_timeline(
+        timeline=timeline, asset_paths={"walk_in_place": "/x"}
+    )
+    assert result["executed"] == []
+    assert len(result["skipped"]) == 1
+    assert "not found" in result["skipped"][0]["reason"]
+
+
+def test_walk_to_no_asset_path_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If `walk_in_place` isn't in asset_paths, walk_to is skipped."""
+    # Build a fake scene with a `door` empty object.
+    target = type("O", (), {"location": type("L", (), {"x": 0.0, "y": 0.0, "z": 0.0})()})()
+    fake_scene = type("S", (), {"objects": {"door": target}, "name": "fake"})()
+    fake_bpy = type(
+        "B",
+        (),
+        {
+            "context": type("C", (), {"scene": fake_scene})(),
+            "data": type("D", (), {"objects": []})(),
+        },
+    )
+    monkeypatch.setattr(action_executor, "bpy", fake_bpy)
+    monkeypatch.setattr(
+        action_executor, "_index_characters_by_handle", lambda: {"student": object()}
+    )
+    timeline = {
+        "shots": [
+            {
+                "actions": [
+                    {
+                        "id": "a1",
+                        "type": "walk_to",
+                        "character": "student",
+                        "target": "door",
+                        "start": 0,
+                        "end": 2,
+                    }
+                ]
+            }
+        ]
+    }
+    result = action_executor.execute_timeline(timeline=timeline, asset_paths={})
+    assert result["executed"] == []
+    assert "no walk_in_place" in result["skipped"][0]["reason"]
+
+
+# --- Integration (real Blender) -----------------------------------------------
+
+
+needs_blender = pytest.mark.skipif(
+    os.environ.get("BLENDER_AVAILABLE") != "1",
+    reason="set BLENDER_AVAILABLE=1 to run integration tests against a real Blender",
+)
+
+
+SCENE_PATH = str(Path("assets/scenes/dark_lab/scene.blend").resolve())
+CHAR_PATH = str(Path("assets/characters/student_v1/character.fbx").resolve())
+WALK_PATH = str(Path("assets/animations/walk_in_place/walk_in_place.fbx").resolve())
+
+
+def _walk_timeline(target: str, start: float = 0.0, end: float = 2.0) -> dict:
+    return {
+        "shots": [
+            {
+                "id": "s1",
+                "start": start,
+                "end": end,
+                "camera": "wide",
+                "actions": [
+                    {
+                        "id": "a1",
+                        "type": "walk_to",
+                        "character": "student",
+                        "target": target,
+                        "start": start,
+                        "end": end,
+                    }
+                ],
+            }
+        ]
+    }
+
+
+@needs_blender
+def test_real_walk_to_places_strip_and_translation() -> None:
+    from planner import daemon_runner
+
+    with daemon_runner.daemon() as h:
+        h.call("load_scene", blend_path=SCENE_PATH)
+        h.call("load_character", fbx_path=CHAR_PATH, spawn_point="door", handle="student")
+        result = h.call(
+            "execute_timeline",
+            timeline=_walk_timeline("robot_station", 0, 4),
+            asset_paths={"walk_in_place": WALK_PATH},
+        )
+
+    assert len(result["executed"]) == 1
+    placed = result["executed"][0]
+    assert placed["type"] == "walk_to"
+    assert placed["start_location"] == [-5.0, 0.0, 0.0]  # door
+    assert placed["end_location"] == [3.0, 0.0, 0.0]  # robot_station
+    assert placed["track"] == "veraframe_walk_a1"
+    assert placed["frame_start"] == 0
+    assert placed["frame_end"] == 96  # 4s × 24fps
+
+
+@needs_blender
+def test_real_walk_to_unknown_target_skips() -> None:
+    from planner import daemon_runner
+
+    with daemon_runner.daemon() as h:
+        h.call("load_scene", blend_path=SCENE_PATH)
+        h.call("load_character", fbx_path=CHAR_PATH, spawn_point="door", handle="student")
+        result = h.call(
+            "execute_timeline",
+            timeline=_walk_timeline("rooftop", 0, 2),
+            asset_paths={"walk_in_place": WALK_PATH},
+        )
+
+    assert result["executed"] == []
+    assert "not found" in result["skipped"][0]["reason"]
