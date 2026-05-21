@@ -199,10 +199,12 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _canned_timeline(registry: Any, duration: float = 2.0) -> dict:
-    """Build a hand-written timeline for `--mock`: one idle of `duration` seconds.
+    """Build a hand-written timeline for `--mock`.
 
-    Picks the first scene and the first character from the registry; uses the
-    first spawn point in that scene. Errors if any of those are empty.
+    If the registry has a `walk_in_place` animation and the scene has more
+    than one spawn point, the canned timeline walks the character from a
+    starting spawn to a centered one and then idles for the remainder.
+    Otherwise it falls back to a single idle of `duration` seconds.
     """
     if not registry.scenes:
         raise SystemExit("--mock: registry has no scenes")
@@ -211,10 +213,46 @@ def _canned_timeline(registry: Any, duration: float = 2.0) -> dict:
 
     scene_id, scene = next(iter(registry.scenes.items()))
     char_preset_id = next(iter(registry.characters))
-    # Prefer a centered spawn for the demo if one exists; otherwise first.
-    spawn = "center_room" if "center_room" in scene.spawn_points else scene.spawn_points[0]
     camera = scene.camera_presets[0]
 
+    has_walk = "walk_in_place" in registry.animations
+    centered = "center_room" if "center_room" in scene.spawn_points else None
+    walk_start = next((s for s in scene.spawn_points if s != centered), None)
+
+    if has_walk and centered and walk_start and duration >= 3.0:
+        walk_duration = min(4.0, duration * 0.4)
+        return {
+            "project": "mock",
+            "scene": scene_id,
+            "characters": [{"id": "student", "preset": char_preset_id, "spawn": walk_start}],
+            "shots": [
+                {
+                    "id": "shot_001",
+                    "start": 0.0,
+                    "end": duration,
+                    "camera": camera,
+                    "actions": [
+                        {
+                            "id": "a1",
+                            "type": "walk_to",
+                            "character": "student",
+                            "target": centered,
+                            "start": 0.0,
+                            "end": walk_duration,
+                        },
+                        {
+                            "id": "a2",
+                            "type": "idle",
+                            "character": "student",
+                            "start": walk_duration,
+                            "end": duration,
+                        },
+                    ],
+                }
+            ],
+        }
+
+    spawn = centered or scene.spawn_points[0]
     return {
         "project": "mock",
         "scene": scene_id,
