@@ -220,7 +220,10 @@ def _canned_timeline(registry: Any, duration: float = 2.0) -> dict:
     walk_start = next((s for s in scene.spawn_points if s != centered), None)
 
     if has_walk and centered and walk_start and duration >= 3.0:
-        walk_duration = min(4.0, duration * 0.4)
+        # Mixamo's Walking clip cycles at ~1.4m per cycle and ~3 cycles per
+        # 4 seconds. Door→center_room is 5m, so a 5–6 second walk matches the
+        # foot stride; faster and the character slides instead of stepping.
+        walk_duration = min(6.0, duration * 0.5)
         return {
             "project": "mock",
             "scene": scene_id,
