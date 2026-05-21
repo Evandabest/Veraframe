@@ -152,7 +152,10 @@ def _set_world_background(color: tuple[float, float, float], strength: float) ->
 def build() -> None:
     _wipe()
     _add_plane("Floor", size=20.0, location=(0.0, 0.0, 0.0))
-    _add_box("Wall_Back", size=2.0, location=(0.0, 5.0, 1.5), scale=(10.0, 0.5, 3.0))
+    # Wall behind the character from the camera's POV. Camera is on +Y side
+    # (Mixamo's natural facing direction); wall is on -Y so it doesn't block
+    # the view.
+    _add_box("Wall_Back", size=2.0, location=(0.0, -5.0, 1.5), scale=(10.0, 0.5, 3.0))
     _add_point_light("MainLight", location=(0.0, 0.0, 5.0), energy=2000.0)
     _add_sun("KeyLight", energy=2.0)
     _set_world_background(color=(0.15, 0.15, 0.18), strength=0.5)
