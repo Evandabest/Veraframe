@@ -69,9 +69,26 @@ def execute(
     strip.repeat = desired_duration / action_length
     strip.extrapolation = "HOLD"
 
-    # Translation F-curve: keyframe current location at start_frame, target at end_frame.
+    # CRITICAL: walk_to keyframes `armature.location` via `keyframe_insert`,
+    # which APPENDS to whatever action is currently in `animation_data.action`
+    # (the "tweak slot"). If a previous action (e.g. look_at's constraint
+    # influence keyframes) already lives there, our location keyframes get
+    # mixed in — and when we push that combined action to NLA, the strip's
+    # frame mapping drifts (action frame range starts at the earliest
+    # keyframe across BOTH actions, not at our location keyframes), AND the
+    # leftover tweak slot continues to mask bone channels.
+    #
+    # Solution: temporarily swap in a dedicated empty action, do the
+    # location keyframes there, push to its own NLA track with ADD blend
+    # (so bone channels pass through), then restore the previous tweak
+    # action so other channels (like look_at's constraint influence) keep
+    # working.
     start_loc = tuple(armature.location)
     end_loc = tuple(target_location)
+
+    prev_tweak = armature.animation_data.action
+    loc_action = bpy.data.actions.new(name=f"veraframe_walk_loc_{action_id}_a")
+    armature.animation_data.action = loc_action
 
     for axis_index in range(3):
         armature.location[axis_index] = start_loc[axis_index]
@@ -79,33 +96,18 @@ def execute(
         armature.location[axis_index] = end_loc[axis_index]
         armature.keyframe_insert(data_path="location", index=axis_index, frame=int(end_frame))
 
-    # CRITICAL: `armature.keyframe_insert` auto-creates an action and assigns
-    # it to `animation_data.action` — Blender's "tweak action" slot. That
-    # slot runs in REPLACE mode on top of the NLA stack, and crucially the
-    # auto-created OBSlot covers EVERY channel of the Object datablock
-    # (location AND pose-bone rotations). REPLACE on a slot whose action
-    # has only location curves silently forces all other channels in the
-    # slot to default — i.e. it resets every pose bone to rest pose, which
-    # kills the walk NLA strip's leg animation.
-    #
-    # Workaround: push the location action onto its own NLA track with
-    # blend_type = ADD instead of REPLACE. ADD treats unanimated channels
-    # as +0 (no contribution) so bone rotations pass through cleanly. To
-    # keep absolute location values working under additive blending, we
-    # also zero the armature's static location so the strip's evaluated
-    # curve IS the final location (base 0 + curve = curve).
-    loc_action = armature.animation_data.action
-    if loc_action is not None:
-        loc_track = armature.animation_data.nla_tracks.new()
-        loc_track.name = f"veraframe_walk_loc_{action_id}"
-        loc_strip = loc_track.strips.new(
-            name=f"loc_{action_id}", start=int(start_frame), action=loc_action
-        )
-        loc_strip.blend_type = "ADD"
-        loc_strip.extrapolation = "HOLD"
-        armature.animation_data.action = None
-        # Reset static location to 0 so additive blend computes absolute values.
-        armature.location = (0.0, 0.0, 0.0)
+    loc_track = armature.animation_data.nla_tracks.new()
+    loc_track.name = f"veraframe_walk_loc_{action_id}"
+    loc_strip = loc_track.strips.new(
+        name=f"loc_{action_id}", start=int(start_frame), action=loc_action
+    )
+    loc_strip.blend_type = "ADD"
+    loc_strip.extrapolation = "HOLD"
+
+    # Restore the previous tweak action and clear the live static value so
+    # ADD blend computes absolute location from the strip (base 0 + curve).
+    armature.animation_data.action = prev_tweak
+    armature.location = (0.0, 0.0, 0.0)
 
     # Don't rotate the armature to face the direction of travel. Same reason
     # as in `character_loader.load_character`: setting `rotation_quaternion`

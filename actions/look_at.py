@@ -59,7 +59,18 @@ def execute(
     constraint.track_axis = _TRACK_AXIS
     constraint.influence = 0.0
 
-    # Keyframe influence: 0 just before start, 1 at start..end, 0 just after.
+    # Keyframe influence into a DEDICATED action that we push to NLA, not
+    # the shared "tweak slot" (animation_data.action). Sharing the tweak
+    # slot across actions causes downstream problems: bone channels in the
+    # slot's domain get reset by REPLACE evaluation, and other actions
+    # that also keyframe via `armature.keyframe_insert` end up appending
+    # to this same action, producing weird frame-range overlap.
+    if armature.animation_data is None:
+        armature.animation_data_create()
+    prev_tweak = armature.animation_data.action
+    inf_action = bpy.data.actions.new(name=f"veraframe_lookat_{action_id}_a")
+    armature.animation_data.action = inf_action
+
     data_path = f'pose.bones["{_HEAD_BONE}"].constraints["{constraint_name}"].influence'
     s, e = int(start_frame), int(end_frame)
 
@@ -71,6 +82,19 @@ def execute(
     ):
         constraint.influence = value
         armature.keyframe_insert(data_path=data_path, frame=frame)
+
+    # Push the influence action to its own NLA track with ADD blend so bone
+    # rotation channels pass through cleanly.
+    inf_track = armature.animation_data.nla_tracks.new()
+    inf_track.name = f"veraframe_lookat_inf_{action_id}"
+    inf_strip = inf_track.strips.new(
+        name=f"inf_{action_id}", start=max(0, s - 1), action=inf_action
+    )
+    inf_strip.blend_type = "ADD"
+    inf_strip.extrapolation = "NOTHING"
+
+    # Restore any prior tweak action.
+    armature.animation_data.action = prev_tweak
 
     return {
         "armature": armature.name,
