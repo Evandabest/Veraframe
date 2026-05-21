@@ -20,6 +20,7 @@ from actions import camera_cut as camera_cut_action
 from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
+from actions import point_at as point_at_action
 from actions import smile as smile_action
 from actions import turn_to as turn_to_action
 from actions import walk_to as walk_to_action
@@ -68,6 +69,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "turn_to":
                 _dispatch_turn_to(action, characters, fps, executed, skipped)
+                continue
+
+            if atype == "point_at":
+                _dispatch_point_at(action, characters, fps, executed, skipped)
                 continue
 
             if atype in ("smile", "frown", "blink"):
@@ -302,6 +307,55 @@ def _dispatch_turn_to(
         return
 
     executed.append({"id": action_id, "type": "turn_to", **result})
+
+
+def _dispatch_point_at(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "point_at",
+                "reason": f"character '{char_id}' not loaded (no armature with that handle)",
+            }
+        )
+        return
+
+    target_name = action.get("target")
+    scene = bpy.context.scene
+    target_obj = scene.objects.get(target_name) if target_name else None
+    if target_obj is None and target_name in characters:
+        target_obj = characters[target_name]
+    if target_obj is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "point_at",
+                "reason": f"target '{target_name}' not found as spawn point or character",
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+
+    try:
+        result = point_at_action.execute(
+            armature, target_obj, start_frame, end_frame, action_id=action_id
+        )
+    except point_at_action.PointAtActionError as e:
+        skipped.append({"id": action_id, "type": "point_at", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "point_at", **result})
 
 
 _EMOTION_HANDLERS = {
