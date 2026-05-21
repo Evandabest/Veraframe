@@ -15,8 +15,11 @@ try:
 except ImportError:
     bpy = None
 
+from actions import blink as blink_action
+from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
+from actions import smile as smile_action
 from actions import walk_to as walk_to_action
 
 
@@ -59,6 +62,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "look_at":
                 _dispatch_look_at(action, characters, fps, executed, skipped)
+                continue
+
+            if atype in ("smile", "frown", "blink"):
+                _dispatch_emotion(action, characters, fps, executed, skipped)
                 continue
 
             skipped.append(
@@ -236,6 +243,46 @@ def _dispatch_look_at(
         return
 
     executed.append({"id": action_id, "type": "look_at", **result})
+
+
+_EMOTION_HANDLERS = {
+    "smile": smile_action.execute,
+    "frown": frown_action.execute,
+    "blink": blink_action.execute,
+}
+
+
+def _dispatch_emotion(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    atype = action.get("type")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": atype,
+                "reason": f"character '{char_id}' not loaded (no armature with that handle)",
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    handler = _EMOTION_HANDLERS[atype]
+    try:
+        result = handler(armature, start_frame, end_frame, action_id=action_id)
+    except Exception as e:  # noqa: BLE001 — surface as skipped rather than crash dispatch
+        skipped.append({"id": action_id, "type": atype, "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": atype, **result})
 
 
 def _index_characters_by_handle() -> dict:
