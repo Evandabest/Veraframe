@@ -23,7 +23,9 @@ from actions import idle as idle_action
 from actions import look_at as look_at_action
 from actions import point_at as point_at_action
 from actions import set_lighting as set_lighting_action
+from actions import sit as sit_action
 from actions import smile as smile_action
+from actions import stand as stand_action
 from actions import turn_to as turn_to_action
 from actions import walk_to as walk_to_action
 
@@ -75,6 +77,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "point_at":
                 _dispatch_point_at(action, characters, fps, executed, skipped)
+                continue
+
+            if atype in ("sit", "stand"):
+                _dispatch_pose(action, characters, fps, executed, skipped)
                 continue
 
             if atype in ("smile", "frown", "blink"):
@@ -366,6 +372,45 @@ def _dispatch_point_at(
         return
 
     executed.append({"id": action_id, "type": "point_at", **result})
+
+
+_POSE_HANDLERS = {
+    "sit": (sit_action.execute, sit_action.SitActionError),
+    "stand": (stand_action.execute, stand_action.StandActionError),
+}
+
+
+def _dispatch_pose(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    atype = action.get("type")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": atype,
+                "reason": f"character '{char_id}' not loaded (no armature with that handle)",
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    handler, error_cls = _POSE_HANDLERS[atype]
+    try:
+        result = handler(armature, start_frame, end_frame, action_id=action_id)
+    except error_cls as e:
+        skipped.append({"id": action_id, "type": atype, "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": atype, **result})
 
 
 _EMOTION_HANDLERS = {
