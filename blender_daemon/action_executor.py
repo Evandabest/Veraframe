@@ -17,6 +17,7 @@ except ImportError:
 
 from actions import blink as blink_action
 from actions import camera_cut as camera_cut_action
+from actions import camera_dolly as camera_dolly_action
 from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
@@ -81,6 +82,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "camera_cut":
                 _dispatch_camera_cut(action, fps, executed, skipped)
+                continue
+
+            if atype == "camera_dolly":
+                _dispatch_camera_dolly(action, fps, executed, skipped)
                 continue
 
             skipped.append(
@@ -420,6 +425,43 @@ def _dispatch_camera_cut(
         return
 
     executed.append({"id": action_id, "type": "camera_cut", **result})
+
+
+def _dispatch_camera_dolly(
+    action: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    from_name = action.get("from_camera")
+    to_name = action.get("to_camera")
+    if not from_name or not to_name:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "camera_dolly",
+                "reason": "from_camera and to_camera are required",
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = camera_dolly_action.execute(
+            bpy.context.scene,
+            from_name,
+            to_name,
+            start_frame,
+            end_frame,
+            action_id=action_id,
+        )
+    except camera_dolly_action.CameraDollyActionError as e:
+        skipped.append({"id": action_id, "type": "camera_dolly", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "camera_dolly", **result})
 
 
 def _index_characters_by_handle() -> dict:
