@@ -151,11 +151,11 @@ def test_real_other_actions_in_timeline_are_skipped() -> None:
     from planner import daemon_runner
 
     timeline = _idle_timeline(0, 2)
-    # Add a walk_to alongside the idle.
+    # Add a not-yet-implemented action alongside the idle.
     timeline["shots"][0]["actions"].append(
         {
             "id": "a2",
-            "type": "walk_to",
+            "type": "turn_to",
             "character": "student",
             "target": "center_room",
             "start": 0,
@@ -180,4 +180,4 @@ def test_real_other_actions_in_timeline_are_skipped() -> None:
     assert len(result["executed"]) == 1
     assert result["executed"][0]["id"] == "a1"
     assert len(result["skipped"]) == 1
-    assert result["skipped"][0]["type"] == "walk_to"
+    assert result["skipped"][0]["type"] == "turn_to"

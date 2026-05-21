@@ -16,6 +16,7 @@ except ImportError:
     bpy = None
 
 from actions import idle as idle_action
+from actions import walk_to as walk_to_action
 
 
 class ExecutorError(RuntimeError):
@@ -49,6 +50,10 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 
             if atype == "idle":
                 _dispatch_idle(action, characters, asset_paths, fps, executed, skipped)
+                continue
+
+            if atype == "walk_to":
+                _dispatch_walk_to(action, characters, asset_paths, fps, executed, skipped)
                 continue
 
             skipped.append(
@@ -110,6 +115,73 @@ def _dispatch_idle(
         return
 
     executed.append({"id": action_id, "type": "idle", **result})
+
+
+def _dispatch_walk_to(
+    action: dict,
+    characters: dict,
+    asset_paths: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "walk_to",
+                "reason": f"character '{char_id}' not loaded (no armature with that handle)",
+            }
+        )
+        return
+
+    target_name = action.get("target")
+    scene = bpy.context.scene
+    target_obj = scene.objects.get(target_name) if target_name else None
+    if target_obj is None and target_name in characters:
+        target_obj = characters[target_name]
+    if target_obj is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "walk_to",
+                "reason": f"target '{target_name}' not found as spawn point or character",
+            }
+        )
+        return
+    target_location = (target_obj.location.x, target_obj.location.y, target_obj.location.z)
+
+    fbx_path = asset_paths.get("walk_in_place")
+    if not fbx_path:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "walk_to",
+                "reason": "no walk_in_place animation path in asset_paths",
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+
+    try:
+        result = walk_to_action.execute(
+            armature,
+            fbx_path,
+            target_location,
+            start_frame,
+            end_frame,
+            action_id=action_id,
+        )
+    except walk_to_action.WalkToActionError as e:
+        skipped.append({"id": action_id, "type": "walk_to", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "walk_to", **result})
 
 
 def _index_characters_by_handle() -> dict:
