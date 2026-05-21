@@ -99,6 +99,22 @@ def load_character(
 
     armature.location = spawn_location
 
+    # Face the active scene camera by default — Mixamo characters import facing
+    # +Y, which is rarely where the camera is. Without this most scenes show
+    # the character in 3/4 profile. Later actions (turn_to, look_at) can
+    # override this rotation.
+    camera = scene.camera or next(
+        (obj for obj in scene.objects if obj.type == "CAMERA"), None
+    )
+    if camera is not None:
+        import mathutils  # local import to keep top-of-module bpy-only
+
+        direction = mathutils.Vector(camera.location) - mathutils.Vector(spawn_location)
+        direction.z = 0  # only horizontal facing; keep the rig upright
+        if direction.length > 1e-6:
+            quat = direction.to_track_quat("Y", "Z")
+            armature.rotation_euler = quat.to_euler()
+
     if handle is None:
         existing_handles = {
             obj.get(_HANDLE_PROP)
