@@ -1,0 +1,8 @@
+{
+  "id": "robot_v1",
+  "display_name": "Robot (X Bot placeholder)",
+  "description": "Second character slot used to validate multi-actor scenes. Currently shares the X Bot mesh as a placeholder until a real robot model is dropped in; functionally distinct from student_v1 (independent armature, handle, and pose).",
+  "mesh_file": "character.fbx",
+  "rig_type": "mixamo",
+  "face_blendshapes": []
+}
