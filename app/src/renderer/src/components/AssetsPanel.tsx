@@ -127,6 +127,12 @@ function SceneRow({
             </li>
           </ul>
           <p className="mt-2 text-neutral-400">
+            <strong>Character facing:</strong> set each Empty's rotation in
+            Blender to control where the character looks when they spawn there.
+            Leave the rotation at identity (0,0,0) to auto-rotate the character
+            toward the active camera.
+          </p>
+          <p className="mt-2 text-neutral-400">
             If no scene is selected, the first available scene from the registry is used.
           </p>
         </InfoTip>

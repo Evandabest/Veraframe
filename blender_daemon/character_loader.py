@@ -108,13 +108,34 @@ def load_character(
     if armature.animation_data is not None:
         armature.animation_data.action = None
 
-    # NOTE: We DO NOT rotate the armature to face the camera. Mixamo walk/idle
-    # actions include bone-level rotations on the Hips that interact badly
-    # with any non-identity object rotation — the bones effectively cancel
-    # the object yaw, leaving the character in rest pose during animation.
-    # Instead, scenes are expected to position the camera on the +Y side of
-    # the character's spawn point (Mixamo's natural facing direction). See
-    # `assets/scenes/dark_lab/build.py`.
+    # Initial facing. Two-tier rule:
+    #   1. If the spawn Empty has a non-identity yaw, the scene designer
+    #      explicitly chose the facing — copy it onto the armature.
+    #   2. Otherwise, auto-rotate the character so it faces the active
+    #      camera. Mixamo's natural facing direction is -Y, so for a camera
+    #      at (cx, cy), the required armature yaw is atan2(cx-x, -(cy-y)).
+    #
+    # turn_to reads `_EFFECTIVE_YAW_PROP` to compose subsequent rotations on
+    # top of this baseline. We set it here so the first turn_to picks the
+    # right start angle regardless of which branch we took.
+    import math
+    spawn_yaw = float(spawn_obj.rotation_euler.z)
+    if abs(spawn_yaw) > 1e-4:
+        initial_yaw = spawn_yaw
+    else:
+        cam = scene.camera
+        if cam is None:
+            initial_yaw = 0.0
+        else:
+            cam_world = cam.matrix_world.translation
+            dx = cam_world.x - spawn_location[0]
+            dy = cam_world.y - spawn_location[1]
+            if dx == 0.0 and dy == 0.0:
+                initial_yaw = 0.0
+            else:
+                initial_yaw = math.atan2(dx, -dy)
+    armature.rotation_euler[2] = initial_yaw
+    armature["veraframe_effective_yaw"] = initial_yaw
 
     if handle is None:
         existing_handles = {
