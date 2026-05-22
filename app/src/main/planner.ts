@@ -9,14 +9,29 @@ export class PlannerError extends Error {
   }
 }
 
+export interface PlannerOptions {
+  /** LiteLLM provider id; sets VERAFRAME_LLM_PROVIDER for the subprocess. */
+  provider?: string
+  /** Model name (no provider prefix); sets VERAFRAME_LLM_MODEL. */
+  model?: string
+  /** Ollama API base; sets OLLAMA_API_BASE so LiteLLM hits the right host. */
+  ollamaHost?: string
+}
+
 /**
  * Invoke `python -m planner.run_planner --prompt ...` and return the timeline JSON.
  *
  * Runs the planner Python subprocess once per render — appropriate while LLM
  * latency dominates startup cost. Stdout carries the JSON, stderr carries
- * progress messages (logged to console).
+ * progress messages (logged to console). Provider/model selection is passed
+ * via env vars that LiteLLM (and `planner.LLMConfig.from_env`) read.
  */
-export function runPlanner(prompt: string, repoRoot: string, assetsDir: string): Promise<Record<string, unknown>> {
+export function runPlanner(
+  prompt: string,
+  repoRoot: string,
+  assetsDir: string,
+  options: PlannerOptions = {}
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const args = [
       '--directory',
@@ -30,7 +45,11 @@ export function runPlanner(prompt: string, repoRoot: string, assetsDir: string):
       '--assets',
       assetsDir
     ]
-    const child = spawn('uv', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const env: NodeJS.ProcessEnv = { ...process.env }
+    if (options.provider) env.VERAFRAME_LLM_PROVIDER = options.provider
+    if (options.model) env.VERAFRAME_LLM_MODEL = options.model
+    if (options.ollamaHost) env.OLLAMA_API_BASE = options.ollamaHost
+    const child = spawn('uv', args, { stdio: ['ignore', 'pipe', 'pipe'], env })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk) => {

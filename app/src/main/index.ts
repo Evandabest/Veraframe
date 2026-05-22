@@ -20,10 +20,15 @@ let assets: AssetRegistry | null = null
  */
 const renderedVideos = new Map<string, string>()
 
+export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
+
 export interface RenderRequest {
   mode: 'mock' | 'llm'
   prompt?: string
   durationSec?: number
+  provider?: LLMProvider
+  model?: string
+  ollamaHost?: string
 }
 
 interface RenderSuccess {
@@ -138,7 +143,11 @@ app.whenReady().then(async () => {
         if (!request.prompt || !request.prompt.trim()) {
           return { ok: false, error: 'LLM mode requires a prompt' }
         }
-        timeline = await runPlanner(request.prompt, resolveRepoRoot(), assets.assetsDir)
+        timeline = await runPlanner(request.prompt, resolveRepoRoot(), assets.assetsDir, {
+          provider: request.provider,
+          model: request.model,
+          ollamaHost: request.ollamaHost
+        })
       }
       const result: RenderResult = await runTimeline(daemonHandle, assets, timeline)
       renderedVideos.set(result.renderId, result.videoPath)
@@ -155,6 +164,35 @@ app.whenReady().then(async () => {
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'listOllamaModels',
+    async (
+      _event,
+      host: string
+    ): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> => {
+      const base = (host || 'http://localhost:11434').replace(/\/+$/, '')
+      try {
+        const response = await fetch(`${base}/api/tags`, {
+          signal: AbortSignal.timeout(3_000)
+        })
+        if (!response.ok) {
+          return { ok: false, error: `Ollama returned HTTP ${response.status}` }
+        }
+        const body = (await response.json()) as { models?: Array<{ name?: string }> }
+        const names = (body.models ?? [])
+          .map((m) => m.name)
+          .filter((n): n is string => Boolean(n))
+          .sort()
+        return { ok: true, models: names }
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Could not reach Ollama at ${base}: ${(err as Error).message}`
+        }
+      }
+    }
+  )
 
   ipcMain.handle(
     'saveRender',
