@@ -35,9 +35,16 @@ class LLMConfig:
 
     @property
     def model_string(self) -> str:
-        """LiteLLM model identifier (e.g. `openai/gpt-4o`)."""
+        """LiteLLM model identifier (e.g. `openai/gpt-4o`).
+
+        Ollama gets routed through the chat endpoint (`ollama_chat/`) since
+        we send role-tagged messages; the generic `ollama/` prefix uses the
+        text-completion endpoint and silently ignores the chat structure.
+        """
         if "/" in self.model:
             return self.model
+        if self.provider == "ollama":
+            return f"ollama_chat/{self.model}"
         return f"{self.provider}/{self.model}"
 
 
