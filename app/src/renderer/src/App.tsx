@@ -1,5 +1,21 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { TimelinePanel } from './components/TimelinePanel'
+
+type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
+
+const PROVIDER_DEFAULT_MODEL: Record<LLMProvider, string> = {
+  openai: 'gpt-4o',
+  anthropic: 'claude-3-5-sonnet-20241022',
+  gemini: 'gemini-1.5-pro',
+  ollama: 'llama3.1'
+}
+
+const PROVIDER_LABEL: Record<LLMProvider, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Google Gemini',
+  ollama: 'Ollama (local)'
+}
 
 type RenderState =
   | { status: 'idle' }
@@ -16,9 +32,53 @@ type RenderState =
 function App(): React.JSX.Element {
   const [mode, setMode] = useState<'mock' | 'llm'>('mock')
   const [prompt, setPrompt] = useState('')
+  const [provider, setProvider] = useState<LLMProvider>('openai')
+  const [model, setModel] = useState<string>(PROVIDER_DEFAULT_MODEL.openai)
+  const [ollamaHost, setOllamaHost] = useState<string>('http://localhost:11434')
+  const [ollamaModels, setOllamaModels] = useState<string[] | null>(null)
+  const [ollamaError, setOllamaError] = useState<string | null>(null)
+  const [ollamaLoading, setOllamaLoading] = useState(false)
+
+  const refreshOllamaModels = async (): Promise<void> => {
+    setOllamaLoading(true)
+    setOllamaError(null)
+    const response = await window.veraframe.listOllamaModels(ollamaHost)
+    setOllamaLoading(false)
+    if (response.ok) {
+      setOllamaModels(response.models)
+      // If the current model isn't in the new list, default to the first
+      // available one (or leave it if list is empty so user sees the error).
+      if (response.models.length > 0 && !response.models.includes(model)) {
+        setModel(response.models[0])
+      }
+    } else {
+      setOllamaModels([])
+      setOllamaError(response.error)
+    }
+  }
+
+  // Auto-fetch when the user selects Ollama or changes the host.
+  useEffect(() => {
+    if (provider === 'ollama') {
+      refreshOllamaModels()
+    } else {
+      setOllamaModels(null)
+      setOllamaError(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, ollamaHost])
   const [state, setState] = useState<RenderState>({ status: 'idle' })
   const [currentTime, setCurrentTime] = useState(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  const onProviderChange = (next: LLMProvider): void => {
+    setProvider(next)
+    // Switch the model field to the preferred default for the new provider —
+    // but only if the user hadn't customized it for the current provider.
+    if (model === PROVIDER_DEFAULT_MODEL[provider]) {
+      setModel(PROVIDER_DEFAULT_MODEL[next])
+    }
+  }
 
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
@@ -26,7 +86,10 @@ function App(): React.JSX.Element {
     setCurrentTime(0)
     const response = await window.veraframe.render({
       mode,
-      prompt: mode === 'llm' ? prompt : undefined
+      prompt: mode === 'llm' ? prompt : undefined,
+      provider: mode === 'llm' ? provider : undefined,
+      model: mode === 'llm' ? model.trim() || undefined : undefined,
+      ollamaHost: mode === 'llm' && provider === 'ollama' ? ollamaHost.trim() || undefined : undefined
     })
     if (response.ok) {
       setState({
@@ -109,6 +172,100 @@ function App(): React.JSX.Element {
             className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
           />
 
+          {mode === 'llm' && (
+            <div className="flex flex-col gap-2 border-t border-neutral-800 pt-3">
+              <div className="grid grid-cols-[6rem_1fr] items-center gap-2">
+                <label className="text-xs text-neutral-400">Provider</label>
+                <select
+                  value={provider}
+                  onChange={(e) => onProviderChange(e.target.value as LLMProvider)}
+                  disabled={isRunning}
+                  className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+                >
+                  {(Object.keys(PROVIDER_LABEL) as LLMProvider[]).map((p) => (
+                    <option key={p} value={p}>
+                      {PROVIDER_LABEL[p]}
+                    </option>
+                  ))}
+                </select>
+
+                <label className="text-xs text-neutral-400">Model</label>
+                {provider === 'ollama' ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      disabled={isRunning || ollamaLoading || !ollamaModels?.length}
+                      className="flex-1 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 font-mono text-sm focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+                    >
+                      {ollamaLoading && <option>Loading…</option>}
+                      {!ollamaLoading && ollamaModels?.length === 0 && (
+                        <option>No models installed</option>
+                      )}
+                      {ollamaModels?.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={refreshOllamaModels}
+                      disabled={isRunning || ollamaLoading}
+                      className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                      ↻
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    disabled={isRunning}
+                    placeholder={PROVIDER_DEFAULT_MODEL[provider]}
+                    className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 font-mono text-sm focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+                  />
+                )}
+
+                {provider === 'ollama' && (
+                  <>
+                    <label className="text-xs text-neutral-400">Host</label>
+                    <input
+                      type="text"
+                      value={ollamaHost}
+                      onChange={(e) => setOllamaHost(e.target.value)}
+                      disabled={isRunning}
+                      placeholder="http://localhost:11434"
+                      className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 font-mono text-sm focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+                    />
+                  </>
+                )}
+              </div>
+              {provider === 'ollama' && ollamaError && (
+                <p className="text-xs text-red-400">{ollamaError}</p>
+              )}
+              {provider === 'ollama' && !ollamaError && ollamaModels?.length === 0 && (
+                <p className="text-xs text-neutral-500">
+                  Reached Ollama, but no models installed. Run{' '}
+                  <code className="font-mono">ollama pull llama3.1</code> in a terminal.
+                </p>
+              )}
+              {provider === 'ollama' && !ollamaError && (ollamaModels?.length ?? 0) > 0 && (
+                <p className="text-xs text-neutral-500">
+                  Local Ollama, no API key needed. {ollamaModels?.length} model
+                  {ollamaModels?.length === 1 ? '' : 's'} available.
+                </p>
+              )}
+              {provider !== 'ollama' && (
+                <p className="text-xs text-neutral-500">
+                  Set the matching <code className="font-mono">{providerKeyEnv(provider)}</code> env
+                  var in the shell that launched Electron.
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={onRender}
@@ -172,6 +329,19 @@ function App(): React.JSX.Element {
       </div>
     </div>
   )
+}
+
+function providerKeyEnv(provider: LLMProvider): string {
+  switch (provider) {
+    case 'openai':
+      return 'OPENAI_API_KEY'
+    case 'anthropic':
+      return 'ANTHROPIC_API_KEY'
+    case 'gemini':
+      return 'GEMINI_API_KEY'
+    case 'ollama':
+      return ''
+  }
 }
 
 export default App
