@@ -8,7 +8,7 @@ import { startDaemon, type DaemonHandle } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
 import { buildMockTimeline } from './mock'
 import { runTimeline, type RenderResult } from './render'
-import { runPlanner, resolveRepoRoot } from './planner'
+import { runPlanner, runEnhance, resolveRepoRoot } from './planner'
 
 let daemonHandle: DaemonHandle | null = null
 let assets: AssetRegistry | null = null
@@ -164,6 +164,27 @@ app.whenReady().then(async () => {
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'enhancePrompt',
+    async (
+      _event,
+      request: { prompt: string; provider?: LLMProvider; model?: string; ollamaHost?: string }
+    ): Promise<{ ok: true; prompt: string } | { ok: false; error: string }> => {
+      if (!assets) return { ok: false, error: 'asset registry not loaded' }
+      if (!request.prompt?.trim()) return { ok: false, error: 'prompt is empty' }
+      try {
+        const enhanced = await runEnhance(request.prompt, resolveRepoRoot(), assets.assetsDir, {
+          provider: request.provider,
+          model: request.model,
+          ollamaHost: request.ollamaHost
+        })
+        return { ok: true, prompt: enhanced }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
 
   ipcMain.handle(
     'listOllamaModels',

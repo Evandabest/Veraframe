@@ -32,6 +32,45 @@ export function runPlanner(
   assetsDir: string,
   options: PlannerOptions = {}
 ): Promise<Record<string, unknown>> {
+  return runPythonEntry<Record<string, unknown>>(
+    'planner.run_planner',
+    prompt,
+    repoRoot,
+    assetsDir,
+    options,
+    (stdout) => JSON.parse(stdout) as Record<string, unknown>
+  )
+}
+
+/**
+ * Invoke `python -m planner.run_enhance` and return the rewritten prompt as
+ * plain text. Same env-var plumbing as runPlanner so the enhance call uses the
+ * same provider/model the user has selected.
+ */
+export function runEnhance(
+  prompt: string,
+  repoRoot: string,
+  assetsDir: string,
+  options: PlannerOptions = {}
+): Promise<string> {
+  return runPythonEntry<string>(
+    'planner.run_enhance',
+    prompt,
+    repoRoot,
+    assetsDir,
+    options,
+    (stdout) => stdout.trim()
+  )
+}
+
+function runPythonEntry<T>(
+  module: string,
+  prompt: string,
+  repoRoot: string,
+  assetsDir: string,
+  options: PlannerOptions,
+  parseStdout: (stdout: string) => T
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const args = [
       '--directory',
@@ -39,7 +78,7 @@ export function runPlanner(
       'run',
       'python',
       '-m',
-      'planner.run_planner',
+      module,
       '--prompt',
       prompt,
       '--assets',
@@ -67,14 +106,13 @@ export function runPlanner(
     })
     child.once('close', (code) => {
       if (code !== 0) {
-        reject(new PlannerError(`planner exited with code ${code}: ${stderr.trim()}`))
+        reject(new PlannerError(`${module} exited with code ${code}: ${stderr.trim()}`))
         return
       }
       try {
-        const timeline = JSON.parse(stdout) as Record<string, unknown>
-        resolve(timeline)
+        resolve(parseStdout(stdout))
       } catch (e) {
-        reject(new PlannerError(`planner output was not JSON: ${(e as Error).message}`))
+        reject(new PlannerError(`${module} output unparsable: ${(e as Error).message}`))
       }
     })
   })

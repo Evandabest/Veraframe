@@ -33,6 +33,17 @@ export type OllamaModelsResponse =
   | { ok: true; models: string[] }
   | { ok: false; error: string }
 
+export type EnhancePromptResponse =
+  | { ok: true; prompt: string }
+  | { ok: false; error: string }
+
+export interface EnhancePromptRequest {
+  prompt: string
+  provider?: LLMProvider
+  model?: string
+  ollamaHost?: string
+}
+
 /** API surface exposed on `window.veraframe` for the React renderer. */
 const veraframe = {
   render: (request: RenderRequest): Promise<RenderResponse> =>
@@ -40,7 +51,9 @@ const veraframe = {
   saveRender: (renderId: string): Promise<SaveRenderResponse> =>
     ipcRenderer.invoke('saveRender', renderId),
   listOllamaModels: (host: string): Promise<OllamaModelsResponse> =>
-    ipcRenderer.invoke('listOllamaModels', host)
+    ipcRenderer.invoke('listOllamaModels', host),
+  enhancePrompt: (request: EnhancePromptRequest): Promise<EnhancePromptResponse> =>
+    ipcRenderer.invoke('enhancePrompt', request)
 }
 
 if (process.contextIsolated) {
