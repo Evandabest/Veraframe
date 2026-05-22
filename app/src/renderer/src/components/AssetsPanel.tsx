@@ -113,14 +113,18 @@ function SceneRow({
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-4">
             <li>
-              <code className="font-mono">scene.blend</code> — Blender file
-              with Empty objects for spawn points and Camera objects for
-              presets, all named exactly as listed in the manifest.
+              <code className="font-mono">scene.blend</code>{' '}
+              <strong>or</strong> <code className="font-mono">scene.fbx</code>{' '}
+              — the geometry, including Empty objects for spawn points and
+              Camera objects for presets, all named exactly as listed in the
+              manifest.
             </li>
             <li>
               <code className="font-mono">scene.json</code> — manifest with{' '}
               <code className="font-mono">id</code>,{' '}
               <code className="font-mono">display_name</code>,{' '}
+              <code className="font-mono">blend_file</code> (the actual file
+              name, with extension),{' '}
               <code className="font-mono">spawn_points</code>,{' '}
               <code className="font-mono">camera_presets</code>,{' '}
               <code className="font-mono">lighting_presets</code>.

@@ -393,11 +393,18 @@ app.whenReady().then(async () => {
       kind: 'scene' | 'character'
     ): Promise<{ ok: true; filePath: string } | { ok: false; error: string }> => {
       const result = await dialog.showOpenDialog({
-        title: kind === 'scene' ? 'Pick a .blend scene file' : 'Pick a .fbx character file',
+        title:
+          kind === 'scene'
+            ? 'Pick a scene file (.blend or .fbx)'
+            : 'Pick a character / animation .fbx',
         properties: ['openFile'],
         filters:
           kind === 'scene'
-            ? [{ name: 'Blender scene', extensions: ['blend'] }]
+            ? [
+                { name: 'Scene file', extensions: ['blend', 'fbx'] },
+                { name: 'Blender scene', extensions: ['blend'] },
+                { name: 'FBX scene', extensions: ['fbx'] }
+              ]
             : [{ name: 'FBX', extensions: ['fbx'] }]
       })
       if (result.canceled || !result.filePaths[0]) {
@@ -427,13 +434,20 @@ app.whenReady().then(async () => {
       const sceneDir = resolvePath(userAssetsDir, 'scenes', payload.id)
       try {
         await mkdir(sceneDir, { recursive: true })
-        const blendDest = resolvePath(sceneDir, 'scene.blend')
-        await copyFile(payload.sourcePath, blendDest)
+        // Preserve the source extension so the daemon picks the right loader.
+        // `.blend` opens via wm.open_mainfile; `.fbx` imports via import_scene.fbx.
+        const sourceExt = payload.sourcePath
+          .toLowerCase()
+          .replace(/^.*\./, '')
+        const ext = sourceExt === 'fbx' ? 'fbx' : 'blend'
+        const sceneFile = `scene.${ext}`
+        const destPath = resolvePath(sceneDir, sceneFile)
+        await copyFile(payload.sourcePath, destPath)
         const manifest = {
           id: payload.id,
           display_name: payload.displayName,
           description: payload.description ?? '',
-          blend_file: 'scene.blend',
+          blend_file: sceneFile,
           spawn_points: payload.spawnPoints,
           camera_presets: payload.cameraPresets,
           lighting_presets: payload.lightingPresets ?? ['default']

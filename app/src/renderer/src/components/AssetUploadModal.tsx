@@ -147,7 +147,7 @@ export function AssetUploadModal({
           </h3>
           <p className="mt-1 text-xs text-neutral-400">
             {kind === 'scene'
-              ? 'Pick a .blend file; we’ll copy it to the user-data dir and write a manifest. The names you give for spawn points and cameras must match the Empty / Camera object names inside the .blend. Tip: rotate each spawn-point Empty to set the character’s starting facing — Empties left at the default (0,0,0) auto-rotate the character toward the active camera.'
+              ? 'Pick a .blend or .fbx scene; we’ll copy it to the user-data dir and write a manifest. The names you give for spawn points and cameras must match the Empty / Camera object names inside the scene file. Tip: rotate each spawn-point Empty in Blender to set the character’s starting facing — Empties left at the default (0,0,0) auto-rotate the character toward the active camera.'
               : 'Pick a .fbx mesh + your own idle.fbx and walk.fbx animations. The rig must be Mixamo-style (matching bone names) so the animation library binds correctly.'}
           </p>
         </header>
@@ -155,10 +155,12 @@ export function AssetUploadModal({
         {pickerError && <p className="text-xs text-red-400">{pickerError}</p>}
 
         <FilePickerField
-          label={kind === 'scene' ? 'Scene file (.blend)' : 'Character mesh (.fbx)'}
+          label={
+            kind === 'scene' ? 'Scene file (.blend or .fbx)' : 'Character mesh (.fbx)'
+          }
           hint={
             kind === 'scene'
-              ? 'The .blend file containing the scene geometry, spawn-point Empties, and Camera objects.'
+              ? 'Either a Blender .blend or an exported .fbx scene. Spawn-point Empties and Camera objects must already exist in the file with the names below.'
               : 'The .fbx mesh with the Mixamo-style rig.'
           }
           value={filePath}
