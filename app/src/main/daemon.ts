@@ -96,6 +96,12 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Dae
     { stdio: ['ignore', 'pipe', 'pipe'] }
   )
 
+  // Forward Blender's stdout/stderr to main's console, line-buffered with a
+  // [blender] prefix so handler tracebacks and daemon prints are visible
+  // alongside Electron's own logs.
+  if (child.stdout) forwardLines(child.stdout, '[blender]', process.stdout)
+  if (child.stderr) forwardLines(child.stderr, '[blender]', process.stderr)
+
   type ExitInfo = { code: number | null; signal: NodeJS.Signals | null }
   let earlyExit: ExitInfo | null = null
   child.once('exit', (code, signal) => {
@@ -139,6 +145,26 @@ function makeHandle(port: number, child: ChildProcess): DaemonHandle {
       }
     }
   }
+}
+
+function forwardLines(
+  stream: NodeJS.ReadableStream,
+  prefix: string,
+  sink: NodeJS.WriteStream
+): void {
+  let buf = ''
+  stream.on('data', (chunk: Buffer | string) => {
+    buf += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+    let newline: number
+    while ((newline = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, newline)
+      buf = buf.slice(newline + 1)
+      sink.write(`${prefix} ${line}\n`)
+    }
+  })
+  stream.on('end', () => {
+    if (buf) sink.write(`${prefix} ${buf}\n`)
+  })
 }
 
 function waitForExit(child: ChildProcess): Promise<void> {
