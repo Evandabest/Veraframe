@@ -4,7 +4,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 
 export interface RenderRequest {
-  mode: 'mock' | 'llm'
+  mode: 'mock' | 'llm' | 'direct'
   prompt?: string
   durationSec?: number
   /** Provider for LLM mode; ignored in mock mode. */
@@ -13,6 +13,8 @@ export interface RenderRequest {
   model?: string
   /** Optional Ollama base URL (defaults to http://localhost:11434). */
   ollamaHost?: string
+  /** Required when mode='direct'; an already-resolved timeline JSON. */
+  timeline?: Record<string, unknown>
 }
 
 export type RenderResponse =
@@ -49,6 +51,22 @@ export interface RenderStatusEvent {
   detail?: string
 }
 
+export interface GenerateActionRequest {
+  prompt: string
+  scene: string
+  character: string
+  actionId: string
+  start: number
+  end: number
+  timelineContext: Record<string, unknown>
+  provider?: LLMProvider
+  model?: string
+}
+
+export type GenerateActionResponse =
+  | { ok: true; action: Record<string, unknown> }
+  | { ok: false; error: string }
+
 /** API surface exposed on `window.veraframe` for the React renderer. */
 const veraframe = {
   render: (request: RenderRequest): Promise<RenderResponse> =>
@@ -59,6 +77,8 @@ const veraframe = {
     ipcRenderer.invoke('listOllamaModels', host),
   enhancePrompt: (request: EnhancePromptRequest): Promise<EnhancePromptResponse> =>
     ipcRenderer.invoke('enhancePrompt', request),
+  generateAction: (request: GenerateActionRequest): Promise<GenerateActionResponse> =>
+    ipcRenderer.invoke('generateAction', request),
   onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
       callback(payload)

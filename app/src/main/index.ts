@@ -7,7 +7,7 @@ import { startDaemon, type DaemonHandle } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
 import { buildMockTimeline } from './mock'
 import { runTimeline, type RenderResult } from './render'
-import { runPlanner, runEnhance, resolveRepoRoot } from './planner'
+import { runPlanner, runEnhance, runActionGen, resolveRepoRoot } from './planner'
 
 let daemonHandle: DaemonHandle | null = null
 let assets: AssetRegistry | null = null
@@ -22,12 +22,14 @@ const renderedVideos = new Map<string, string>()
 export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 
 export interface RenderRequest {
-  mode: 'mock' | 'llm'
+  mode: 'mock' | 'llm' | 'direct'
   prompt?: string
   durationSec?: number
   provider?: LLMProvider
   model?: string
   ollamaHost?: string
+  /** Required when mode='direct'; an already-resolved timeline JSON. */
+  timeline?: Record<string, unknown>
 }
 
 interface RenderSuccess {
@@ -194,6 +196,11 @@ app.whenReady().then(async () => {
       if (request.mode === 'mock') {
         sendProgress('build_mock_timeline')
         timeline = buildMockTimeline(assets, request.durationSec ?? 8)
+      } else if (request.mode === 'direct') {
+        if (!request.timeline) {
+          return { ok: false, error: 'direct mode requires a timeline' }
+        }
+        timeline = request.timeline
       } else {
         if (!request.prompt || !request.prompt.trim()) {
           return { ok: false, error: 'LLM mode requires a prompt' }
@@ -222,6 +229,46 @@ app.whenReady().then(async () => {
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'generateAction',
+    async (
+      _event,
+      request: {
+        prompt: string
+        scene: string
+        character: string
+        actionId: string
+        start: number
+        end: number
+        timelineContext: Record<string, unknown>
+        provider?: LLMProvider
+        model?: string
+      }
+    ): Promise<{ ok: true; action: Record<string, unknown> } | { ok: false; error: string }> => {
+      if (!assets) return { ok: false, error: 'asset registry not loaded' }
+      if (!request.prompt?.trim()) return { ok: false, error: 'prompt is empty' }
+      try {
+        const action = await runActionGen(
+          request.prompt,
+          resolveRepoRoot(),
+          assets.assetsDir,
+          {
+            scene: request.scene,
+            character: request.character,
+            actionId: request.actionId,
+            start: request.start,
+            end: request.end,
+            context: request.timelineContext
+          },
+          { provider: request.provider, model: request.model }
+        )
+        return { ok: true, action }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
 
   ipcMain.handle(
     'enhancePrompt',

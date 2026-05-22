@@ -63,13 +63,55 @@ export function runEnhance(
   )
 }
 
+export interface ActionGenContext {
+  scene: string
+  character: string
+  actionId: string
+  start: number
+  end: number
+  /** Full timeline JSON so the LLM can see other characters / sibling actions. */
+  context: Record<string, unknown>
+}
+
+/**
+ * Invoke `python -m planner.run_action` to regenerate a single action from a
+ * natural-language prompt. The caller's character/start/end/id are enforced
+ * server-side, so the LLM only chooses the action type and its parameters.
+ */
+export function runActionGen(
+  prompt: string,
+  repoRoot: string,
+  assetsDir: string,
+  actionCtx: ActionGenContext,
+  options: PlannerOptions = {}
+): Promise<Record<string, unknown>> {
+  const extraArgs = [
+    '--scene', actionCtx.scene,
+    '--character', actionCtx.character,
+    '--action-id', actionCtx.actionId,
+    '--start', String(actionCtx.start),
+    '--end', String(actionCtx.end),
+    '--context-json', JSON.stringify(actionCtx.context)
+  ]
+  return runPythonEntry<Record<string, unknown>>(
+    'planner.run_action',
+    prompt,
+    repoRoot,
+    assetsDir,
+    options,
+    (stdout) => JSON.parse(stdout) as Record<string, unknown>,
+    extraArgs
+  )
+}
+
 function runPythonEntry<T>(
   module: string,
   prompt: string,
   repoRoot: string,
   assetsDir: string,
   options: PlannerOptions,
-  parseStdout: (stdout: string) => T
+  parseStdout: (stdout: string) => T,
+  extraArgs: string[] = []
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const args = [
@@ -82,7 +124,8 @@ function runPythonEntry<T>(
       '--prompt',
       prompt,
       '--assets',
-      assetsDir
+      assetsDir,
+      ...extraArgs
     ]
     const env: NodeJS.ProcessEnv = { ...process.env }
     if (options.provider) env.VERAFRAME_LLM_PROVIDER = options.provider
