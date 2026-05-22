@@ -41,10 +41,13 @@ function App(): React.JSX.Element {
   const [ollamaLoading, setOllamaLoading] = useState(false)
   const [enhancing, setEnhancing] = useState(false)
   const [enhanceError, setEnhanceError] = useState<string | null>(null)
+  const [pendingEnhanced, setPendingEnhanced] = useState<string | null>(null)
+  const reviewRef = useRef<HTMLDivElement | null>(null)
 
   const onEnhance = async (): Promise<void> => {
     if (!prompt.trim()) return
     setEnhanceError(null)
+    setPendingEnhanced(null)
     setEnhancing(true)
     const response = await window.veraframe.enhancePrompt({
       prompt,
@@ -54,11 +57,27 @@ function App(): React.JSX.Element {
     })
     setEnhancing(false)
     if (response.ok) {
-      setPrompt(response.prompt)
+      setPendingEnhanced(response.prompt)
     } else {
       setEnhanceError(response.error)
     }
   }
+
+  const onAcceptEnhanced = (): void => {
+    if (pendingEnhanced) setPrompt(pendingEnhanced)
+    setPendingEnhanced(null)
+  }
+
+  const onRejectEnhanced = (): void => {
+    setPendingEnhanced(null)
+  }
+
+  // Scroll the review panel into view as soon as it appears.
+  useEffect(() => {
+    if (pendingEnhanced && reviewRef.current) {
+      reviewRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [pendingEnhanced])
 
   const refreshOllamaModels = async (): Promise<void> => {
     setOllamaLoading(true)
@@ -207,6 +226,38 @@ function App(): React.JSX.Element {
           </div>
           {enhanceError && (
             <p className="text-xs text-red-400">Enhance failed: {enhanceError}</p>
+          )}
+
+          {pendingEnhanced && (
+            <div
+              ref={reviewRef}
+              className="flex flex-col gap-2 rounded-md border border-emerald-500/60 bg-emerald-500/10 p-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                  Enhanced prompt
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onAcceptEnhanced}
+                    className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-500"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRejectEnhanced}
+                    className="rounded-md border border-neutral-700 px-3 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+              <pre className="whitespace-pre-wrap break-words font-mono text-sm text-emerald-50">
+                {pendingEnhanced}
+              </pre>
+            </div>
           )}
 
           {mode === 'llm' && (

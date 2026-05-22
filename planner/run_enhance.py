@@ -30,6 +30,7 @@ Your job: take the user's free-form prompt and rewrite it so the downstream plan
 
 # Rewrite rules
 
+- **Preserve the user's original intent.** The story beats, character actions, mood, and overall narrative arc must remain the same — you are sharpening references and timing, not re-imagining the scene. If the user wrote "she walks in sadly", the rewrite still has her walk in sadly. If they didn't mention something, don't add it.
 - Pick one scene by id and reference it explicitly.
 - For every character the user mentions, choose a character preset and a spawn point from that scene; name both.
 - Translate vague verbs into action types from the action list. Resolve targets to spawn point names or other character ids.
