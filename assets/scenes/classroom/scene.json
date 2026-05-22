@@ -1,0 +1,9 @@
+{
+  "id": "classroom",
+  "display_name": "Classroom",
+  "description": "Furnished school classroom with desks, chairs, lockers, and tall windows. Imported from a downloaded FBX with custom spawn points, cameras, and lighting added at build time.",
+  "blend_file": "scene.blend",
+  "spawn_points": ["door", "center_room", "teacher_desk", "student_desk"],
+  "camera_presets": ["wide", "close_student"],
+  "lighting_presets": ["default", "dim", "emergency"]
+}

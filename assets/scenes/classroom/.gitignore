@@ -1,0 +1,5 @@
+# Author-attribution-unknown downloaded assets. The baked scene.blend
+# (textures packed in via bpy.ops.file.pack_all) is what the daemon uses;
+# these directories are only needed to re-run build.py.
+source/
+textures/
