@@ -1,8 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, dialog } from 'electron'
-import { createReadStream } from 'fs'
-import { copyFile, stat } from 'fs/promises'
+import { copyFile, open, stat } from 'fs/promises'
 import { join } from 'path'
-import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { startDaemon, type DaemonHandle } from './daemon'
@@ -103,14 +101,14 @@ app.whenReady().then(async () => {
 
   // Serve rendered MP4s under veraframe-render://<id>/video.mp4.
   // Implements HTTP Range requests so the <video> element can seek. Without
-  // Range support every video.currentTime = T request returns the whole file
-  // and the browser resets playback to 0 — breaking both the timeline scrubber
-  // and the native player controls.
+  // 206 Partial Content support, every video.currentTime = T request returns
+  // the whole file from byte 0 and the browser resets playback to 0.
   protocol.handle('veraframe-render', async (request) => {
     const url = new URL(request.url)
     const renderId = url.hostname
     const filePath = renderedVideos.get(renderId)
     if (!filePath) {
+      console.log(`[protocol] 404 ${request.url} (no path for renderId=${renderId})`)
       return new Response('not found', { status: 404 })
     }
     let fileSize: number
@@ -118,6 +116,7 @@ app.whenReady().then(async () => {
       const info = await stat(filePath)
       fileSize = info.size
     } catch {
+      console.log(`[protocol] 404 ${request.url} (file missing: ${filePath})`)
       return new Response('file missing', { status: 404 })
     }
 
@@ -128,8 +127,14 @@ app.whenReady().then(async () => {
       const end = rangeMatch[2] ? Number.parseInt(rangeMatch[2], 10) : fileSize - 1
       const safeEnd = Math.min(end, fileSize - 1)
       const chunkSize = safeEnd - start + 1
-      const stream = createReadStream(filePath, { start, end: safeEnd })
-      return new Response(Readable.toWeb(stream) as ReadableStream, {
+      const fh = await open(filePath, 'r')
+      const buffer = Buffer.alloc(chunkSize)
+      await fh.read(buffer, 0, chunkSize, start)
+      await fh.close()
+      console.log(
+        `[protocol] 206 ${request.url} range=${start}-${safeEnd}/${fileSize} (${chunkSize}B)`
+      )
+      return new Response(buffer, {
         status: 206,
         headers: {
           'Content-Type': 'video/mp4',
@@ -140,10 +145,14 @@ app.whenReady().then(async () => {
       })
     }
 
-    // Full-file response — also advertise Accept-Ranges so the browser knows
-    // it can issue Range requests for subsequent seeks.
-    const stream = createReadStream(filePath)
-    return new Response(Readable.toWeb(stream) as ReadableStream, {
+    // Full-file response — advertise Accept-Ranges so the browser knows it can
+    // issue Range requests for subsequent seeks.
+    const fh = await open(filePath, 'r')
+    const buffer = Buffer.alloc(fileSize)
+    await fh.read(buffer, 0, fileSize, 0)
+    await fh.close()
+    console.log(`[protocol] 200 ${request.url} (full ${fileSize}B)`)
+    return new Response(buffer, {
       status: 200,
       headers: {
         'Content-Type': 'video/mp4',
