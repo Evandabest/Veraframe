@@ -44,6 +44,8 @@ export interface RenderRequest {
   selectedScene?: string
   /** Hard constraint: LLM mode only. Limits the character pool. */
   selectedCharacters?: string[]
+  /** Render quality preset. Defaults to 'hifi'. */
+  quality?: 'draft' | 'hifi'
 }
 
 interface RenderSuccess {
@@ -322,7 +324,8 @@ app.whenReady().then(async () => {
       }
       const result: RenderResult = await runTimeline(daemonHandle, assets, timeline, {
         onProgress: ({ step, detail }) => sendProgress(step, detail),
-        incremental: incrementalConfig
+        incremental: incrementalConfig,
+        quality: request.quality
       })
       renderedVideos.set(result.renderId, result.videoPath)
       return {

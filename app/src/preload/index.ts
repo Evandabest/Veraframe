@@ -28,6 +28,8 @@ export interface RenderRequest {
   selectedScene?: string
   /** Hard-constrain LLM character pool to these preset ids. */
   selectedCharacters?: string[]
+  /** Render quality preset. 'draft' = fast iteration; 'hifi' = full quality. */
+  quality?: 'draft' | 'hifi'
 }
 
 export interface RegistrySceneSummary {
