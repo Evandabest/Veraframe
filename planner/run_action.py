@@ -71,7 +71,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--character", required=True, help="Character handle (id), not preset.")
     parser.add_argument("--action-id", required=True)
     parser.add_argument("--start", required=True, type=float)
-    parser.add_argument("--end", required=True, type=float)
+    parser.add_argument(
+        "--end",
+        type=float,
+        default=None,
+        help="If provided, locks the action's end time (used when editing an existing block). "
+        "Otherwise the LLM chooses a sensible duration based on the action type.",
+    )
     parser.add_argument("--context-json", default="{}", help="Timeline-context JSON.")
     return parser.parse_args(argv)
 
@@ -91,10 +97,22 @@ def main(argv: list[str] | None = None) -> int:
         registry_section=registry.to_system_prompt_section()
     )
 
+    if args.end is not None:
+        timing_msg = (
+            f"Time window: {args.start:.2f}s → {args.end:.2f}s (FIXED — use this exact window)."
+        )
+    else:
+        timing_msg = (
+            f"Start time: {args.start:.2f}s (FIXED). "
+            "End time is up to you — pick a sensible duration for the action "
+            "(facial expressions ~1-2s, walks ~3-5s, idles can be anything). "
+            "The caller will accept whatever end you choose."
+        )
+
     user_message = (
         f"Active scene: `{args.scene}`.\n"
         f"Character handle: `{args.character}`.\n"
-        f"Time window: {args.start:.2f}s → {args.end:.2f}s.\n"
+        f"{timing_msg}\n"
         f"Existing timeline context (for reference):\n```json\n{json.dumps(context)}\n```\n\n"
         f"User instruction: {args.prompt}"
     )
@@ -119,12 +137,23 @@ def main(argv: list[str] | None = None) -> int:
     print(content, file=sys.stderr)
     wrapped = ActionResponse.model_validate_json(content)
 
-    # Overwrite the fields the caller has authority over.
+    # Overwrite the fields the caller has authority over. Start and id and
+    # character are always forced. End is only forced when the caller provided
+    # one (edit flow); otherwise we keep the LLM's chosen end after a sanity
+    # check.
     payload = wrapped.action.model_dump()
     payload["id"] = args.action_id
     payload["character"] = args.character
     payload["start"] = args.start
-    payload["end"] = args.end
+    if args.end is not None:
+        payload["end"] = args.end
+    if payload["end"] <= payload["start"]:
+        print(
+            f"[run_action] LLM picked end={payload['end']} <= start={payload['start']};"
+            " falling back to start + 2s",
+            file=sys.stderr,
+        )
+        payload["end"] = payload["start"] + 2.0
     final = TypeAdapter(Action).validate_python(payload)
 
     sys.stdout.write(json.dumps(final.model_dump(mode="json")) + "\n")

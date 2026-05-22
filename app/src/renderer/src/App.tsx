@@ -215,7 +215,8 @@ function App(): React.JSX.Element {
   interface EditorTarget {
     laneId: string
     startSec: number
-    endSec: number
+    /** Locked end (edit flow). Undefined when adding — LLM picks duration. */
+    endSec: number | null
     original: TimelineAction | null
   }
   const [editor, setEditor] = useState<EditorTarget | null>(null)
@@ -234,7 +235,7 @@ function App(): React.JSX.Element {
     setEditor({
       laneId,
       startSec: action.start,
-      endSec: action.end,
+      endSec: action.end, // locked for edits
       original: action
     })
     setPendingAction(null)
@@ -243,10 +244,9 @@ function App(): React.JSX.Element {
 
   const onAddAction = (laneId: string, startSec: number): void => {
     if (state.status !== 'success') return
-    // Default new block duration. If startSec is at or past the current end,
-    // the timeline grows by this amount on accept.
-    const endSec = startSec + 2
-    setEditor({ laneId, startSec, endSec, original: null })
+    // No pre-determined end — the LLM picks a sensible duration based on the
+    // action type it chooses (1-2s for face expressions, 3-5s for walks, etc).
+    setEditor({ laneId, startSec, endSec: null, original: null })
     setPendingAction(null)
     setActionError(null)
   }
@@ -263,7 +263,7 @@ function App(): React.JSX.Element {
       character: editor.laneId,
       actionId: targetId,
       start: editor.startSec,
-      end: editor.endSec,
+      end: editor.endSec ?? undefined,
       timelineContext: state.timeline,
       provider,
       model: model.trim() || undefined
@@ -630,7 +630,7 @@ function App(): React.JSX.Element {
         original={editor?.original ?? null}
         laneId={editor?.laneId ?? ''}
         startSec={editor?.startSec ?? 0}
-        endSec={editor?.endSec ?? 0}
+        endSec={editor?.endSec ?? null}
         pendingAction={pendingAction}
         generating={generatingAction}
         error={actionError}
@@ -638,6 +638,16 @@ function App(): React.JSX.Element {
         onAccept={onAcceptAction}
         onReject={onRejectAction}
         onClose={closeEditor}
+        onEnhance={async (text) => {
+          const response = await window.veraframe.enhancePrompt({
+            prompt: text,
+            provider,
+            model: model.trim() || undefined,
+            ollamaHost: undefined
+          })
+          if (response.ok) return response.prompt
+          throw new Error(response.error)
+        }}
       />
     </div>
   )

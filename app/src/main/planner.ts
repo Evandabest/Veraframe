@@ -68,7 +68,9 @@ export interface ActionGenContext {
   character: string
   actionId: string
   start: number
-  end: number
+  /** Optional. When provided, locks the action's end time (edit flow).
+   *  Omitted, the LLM picks an end time based on the action it chooses. */
+  end?: number
   /** Full timeline JSON so the LLM can see other characters / sibling actions. */
   context: Record<string, unknown>
 }
@@ -90,9 +92,11 @@ export function runActionGen(
     '--character', actionCtx.character,
     '--action-id', actionCtx.actionId,
     '--start', String(actionCtx.start),
-    '--end', String(actionCtx.end),
     '--context-json', JSON.stringify(actionCtx.context)
   ]
+  if (actionCtx.end !== undefined) {
+    extraArgs.push('--end', String(actionCtx.end))
+  }
   return runPythonEntry<Record<string, unknown>>(
     'planner.run_action',
     prompt,

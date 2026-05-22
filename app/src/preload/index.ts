@@ -66,7 +66,8 @@ export interface GenerateActionRequest {
   character: string
   actionId: string
   start: number
-  end: number
+  /** Optional. If omitted, the LLM picks the action's duration. */
+  end?: number
   timelineContext: Record<string, unknown>
   provider?: LLMProvider
   model?: string
