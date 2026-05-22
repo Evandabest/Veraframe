@@ -148,7 +148,7 @@ export function AssetUploadModal({
           <p className="mt-1 text-xs text-neutral-400">
             {kind === 'scene'
               ? 'Pick a .blend or .fbx scene; we’ll copy it to the user-data dir and write a manifest. The names you give for spawn points and cameras must match the Empty / Camera object names inside the scene file. Tip: rotate each spawn-point Empty in Blender to set the character’s starting facing — Empties left at the default (0,0,0) auto-rotate the character toward the active camera.'
-              : 'Pick a .fbx mesh + your own idle.fbx and walk.fbx animations. The rig must be Mixamo-style (matching bone names) so the animation library binds correctly.'}
+              : 'Pick a .fbx mesh + your own idle.fbx and walk.fbx animations. The body must use Mixamo-style bone names so walk/idle/turn/look bind correctly. VRM-style face shape keys (Joy, Sorrow, Blink, A/I/U/E/O visemes) are optional — without them the smile / frown / blink / talk actions become no-ops, but the character will still walk and idle fine.'}
           </p>
         </header>
 

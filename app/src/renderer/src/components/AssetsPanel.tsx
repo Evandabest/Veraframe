@@ -218,13 +218,13 @@ function CharacterRow({
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-4">
             <li>
-              <code className="font-mono">character.fbx</code> — humanoid rig.{' '}
-              <strong>Mixamo-style bone names</strong> are required for the
-              animation library (idle, walk_in_place) to bind correctly.
-              VRM-style face blendshapes (<code className="font-mono">Joy</code>,{' '}
-              <code className="font-mono">Sorrow</code>,{' '}
-              <code className="font-mono">Blink</code>, visemes) are optional
-              and only matter for facial actions.
+              <code className="font-mono">character.fbx</code> — humanoid mesh
+              + skeleton.
+            </li>
+            <li>
+              <code className="font-mono">idle.fbx</code> +{' '}
+              <code className="font-mono">walk_in_place.fbx</code> — Mixamo-style
+              NLA clips on the same skeleton.
             </li>
             <li>
               <code className="font-mono">character.json</code> — manifest
@@ -232,7 +232,37 @@ function CharacterRow({
               <code className="font-mono">display_name</code>,{' '}
               <code className="font-mono">mesh_file</code>,{' '}
               <code className="font-mono">rig_type</code> (defaults to{' '}
-              <code className="font-mono">mixamo</code>).
+              <code className="font-mono">mixamo</code>),{' '}
+              <code className="font-mono">animations</code> (paths to the FBX
+              clips above).
+            </li>
+          </ul>
+          <p className="mt-2 font-semibold text-neutral-100">Rig conventions</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            <li>
+              <strong>Body — Mixamo bone names</strong> (required).{' '}
+              <code className="font-mono">mixamorig:Hips</code>,{' '}
+              <code className="font-mono">mixamorig:Head</code>, etc. Drives
+              <em> walk_to</em>, <em>idle</em>, <em>turn_to</em>,{' '}
+              <em>look_at</em>, <em>point_at</em>, <em>sit</em>,{' '}
+              <em>stand</em>. Mixamo exports already follow this naming;
+              VRoid Studio characters work after running them through
+              Mixamo's auto-rigger.
+            </li>
+            <li>
+              <strong>Face — VRM-style shape keys</strong> (optional). Names
+              like <code className="font-mono">Joy</code>,{' '}
+              <code className="font-mono">Angry</code>,{' '}
+              <code className="font-mono">Sorrow</code>,{' '}
+              <code className="font-mono">Fun</code>,{' '}
+              <code className="font-mono">Neutral</code>, the visemes{' '}
+              <code className="font-mono">A / I / U / E / O</code>, and{' '}
+              <code className="font-mono">Blink</code> /{' '}
+              <code className="font-mono">Blink_L</code> /{' '}
+              <code className="font-mono">Blink_R</code>. Drive{' '}
+              <em>smile</em>, <em>frown</em>, <em>blink</em>, <em>talk</em>{' '}
+              lip-sync. Missing them just makes those actions no-ops — the
+              character will still walk and idle normally.
             </li>
           </ul>
           <p className="mt-2 text-neutral-400">
