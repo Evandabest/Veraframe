@@ -59,26 +59,27 @@ You will output a JSON object that conforms exactly to the provided schema. Do n
 - Choose exactly one scene from the available scenes list.
 - Declare every character you reference up front in the project's `characters` array.
 - **Each entry in `characters` has three required fields and they are different things:**
-  - `id`: a short free-text handle YOU invent (e.g. `"student"`, `"robot"`, `"alice"`). Actions reference this handle. Do NOT reuse a preset id, scene id, or camera name here.
-  - `preset`: must be exactly one of the ids in the "Available characters" list above (e.g. `"student_v1"`, `"robot_v1"`). This is the model/rig that gets loaded.
+  - `id`: a short free-text handle YOU invent (any string — typically a role name). Actions reference this handle. Do NOT reuse a preset id, scene id, or camera name here.
+  - `preset`: must be exactly one of the ids in the "Available characters" list above. This is the model/rig that gets loaded.
   - `spawn`: must be exactly one of the chosen scene's spawn points.
-- Inside actions, the `character` field, plus `target` and `look_at` when they point at another character, must use the handle from `id`, NOT the preset name.
+- Inside actions, the `character` field, plus `target` and `look_at` when they point at another character, must use the handle from `id`, NOT the preset id.
 - `camera`, `from_camera`, and `to_camera` must each be one of the chosen scene's camera presets — these are scene cameras, not character presets.
 - `preset` in `set_lighting` must be one of the chosen scene's lighting presets — distinct from character presets and camera presets.
 - All times are absolute seconds. Every action's `end` must be greater than its `start`. Action timestamps must fit within the parent shot's window.
 - Use only action types from the available actions list. Respect each action's required and optional parameters.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
 
-# Worked example of the characters block
+# Worked structural example (placeholders — substitute real names from the catalog above)
 
 ```json
 "characters": [
-  {{"id": "student", "preset": "student_v1", "spawn": "door"}},
-  {{"id": "robot",   "preset": "robot_v1",   "spawn": "teacher_desk"}}
+  {{"id": "<your-handle-A>", "preset": "<a-preset-id-from-the-Available-characters-list>", "spawn": "<a-spawn-from-the-chosen-scene>"}},
+  {{"id": "<your-handle-B>", "preset": "<another-preset-id-from-the-Available-characters-list>", "spawn": "<another-spawn>"}}
 ]
 ```
 
-Then actions reference the handle: `{{"character": "student", ...}}`, not `{{"character": "student_v1", ...}}`.
+Then actions reference the handle, not the preset:
+`{{"character": "<your-handle-A>", ...}}`, NOT `{{"character": "<a-preset-id>", ...}}`.
 """
 
 

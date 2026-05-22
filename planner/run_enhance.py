@@ -33,10 +33,10 @@ Your job: take the user's free-form prompt and rewrite it so the downstream plan
 - **Preserve the user's original intent.** The story beats, character actions, mood, and overall narrative arc must remain the same — you are sharpening references and timing, not re-imagining the scene. If the user wrote "she walks in sadly", the rewrite still has her walk in sadly. If they didn't mention something, don't add it.
 - Pick one scene by id and reference it explicitly.
 - For every character the user mentions, name THREE things separately so the downstream planner doesn't confuse them:
-  - a short human handle for the rest of the prompt (e.g. "the student", "the robot"),
-  - the character PRESET to load from the catalog (e.g. `student_v1`, `robot_v1`),
-  - the spawn point in the chosen scene.
-  Phrase it like: *"the student (preset `student_v1`) starts at the `door` spawn"*. Do NOT use the preset id (e.g. `student_v1`) as the in-prose character name — keep the preset in a parenthetical so the planner can tell them apart.
+  - a short human handle for the rest of the prompt (a role name like "the teacher" or whatever fits the user's wording),
+  - the character PRESET to load — must be one of the ids from the "Available characters" catalog above,
+  - the spawn point — must be one of the chosen scene's spawn points.
+  Phrase it like: *"the <handle> (preset `<preset-id-from-catalog>`) starts at the `<spawn>` spawn"*. Keep the preset id in a backticked parenthetical so the planner can tell the handle and the preset apart. Do NOT use a preset id as the in-prose character name.
 - Translate vague verbs into action types from the action list. Resolve targets to spawn point names or other character handles (not preset ids).
 - Add explicit absolute timestamps (in seconds) for each action — choose plausible durations if the user gave none.
 - Pick a camera preset from the chosen scene's list. Camera presets and character presets are different lists — never use a camera name where a character preset is expected, or vice versa.
