@@ -32,15 +32,26 @@ class RenderError(RuntimeError):
     """Raised when the render can't be set up or completes unsuccessfully."""
 
 
+# Render-quality presets. Draft trades fidelity for speed (down-resolution + 1
+# sample) so edit-iterate loops feel responsive; hifi matches the original
+# defaults used through the MVP. Callers can still pass explicit
+# resolution_x/y/samples to override.
+_QUALITY_PRESETS: dict[str, dict[str, int]] = {
+    "draft": {"resolution_x": 854, "resolution_y": 480, "samples": 1},
+    "hifi": {"resolution_x": 1280, "resolution_y": 720, "samples": 16},
+}
+
+
 def render(
     start_frame: int,
     end_frame: int,
     output_path: str,
     *,
-    resolution_x: int = 1280,
-    resolution_y: int = 720,
+    resolution_x: int | None = None,
+    resolution_y: int | None = None,
     fps: int = 24,
-    samples: int = 16,
+    samples: int | None = None,
+    quality: str = "hifi",
     keep_frames: bool = False,
 ) -> dict:
     """Render the active scene to an MP4 at `output_path` for the given frames.
@@ -55,9 +66,14 @@ def render(
     out = Path(output_path).expanduser().resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    preset = _QUALITY_PRESETS.get(quality, _QUALITY_PRESETS["hifi"])
+    rx = resolution_x if resolution_x is not None else preset["resolution_x"]
+    ry = resolution_y if resolution_y is not None else preset["resolution_y"]
+    sa = samples if samples is not None else preset["samples"]
+
     camera = _ensure_camera(scene)
     engine = _select_engine(scene)
-    _configure_render(scene, resolution_x, resolution_y, fps, samples)
+    _configure_render(scene, rx, ry, fps, sa)
 
     frames_dir = Path(tempfile.mkdtemp(prefix="veraframe_render_"))
     # Blender appends frame numbers to the filepath. Trailing `/` makes the
