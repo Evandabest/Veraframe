@@ -34,9 +34,9 @@ Your job: take the user's free-form prompt and rewrite it so the downstream plan
 - Pick one scene by id and reference it explicitly.
 - For every character the user mentions, name THREE things separately so the downstream planner doesn't confuse them:
   - a short human handle for the rest of the prompt (a role name like "the teacher" or whatever fits the user's wording),
-  - the character PRESET to load — must be one of the ids from the "Available characters" catalog above,
+  - the character preset to load — must be one of the ids from the "Available characters" catalog above,
   - the spawn point — must be one of the chosen scene's spawn points.
-  Phrase it like: *"the <handle> (preset `<preset-id-from-catalog>`) starts at the `<spawn>` spawn"*. Keep the preset id in a backticked parenthetical so the planner can tell the handle and the preset apart. Do NOT use a preset id as the in-prose character name.
+  Mention the preset id in a backticked parenthetical right after the handle (e.g. "the teacher (preset \`SOME_PRESET_FROM_THE_CATALOG\`)"). Substitute a REAL preset id from the catalog — never emit angle brackets, ALL CAPS slot names, or any literal text from these rules.
 - Translate vague verbs into action types from the action list. Resolve targets to spawn point names or other character handles (not preset ids).
 - Add explicit absolute timestamps (in seconds) for each action — choose plausible durations if the user gave none.
 - Pick a camera preset from the chosen scene's list. Camera presets and character presets are different lists — never use a camera name where a character preset is expected, or vice versa.

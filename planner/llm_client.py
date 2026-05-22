@@ -58,28 +58,19 @@ You will output a JSON object that conforms exactly to the provided schema. Do n
 
 - Choose exactly one scene from the available scenes list.
 - Declare every character you reference up front in the project's `characters` array.
-- **Each entry in `characters` has three required fields and they are different things:**
-  - `id`: a short free-text handle YOU invent (any string — typically a role name). Actions reference this handle. Do NOT reuse a preset id, scene id, or camera name here.
-  - `preset`: must be exactly one of the ids in the "Available characters" list above. This is the model/rig that gets loaded.
+- **Each entry in `characters` has three required fields and they mean different things — keep them distinct:**
+  - `id`: a short role handle you choose freely. Used by actions to refer to this character. Do NOT use a preset id, scene id, or camera name as a handle.
+  - `preset`: must be exactly one of the entries in the "Available characters" section above. This is the asset that gets loaded.
   - `spawn`: must be exactly one of the chosen scene's spawn points.
 - Inside actions, the `character` field, plus `target` and `look_at` when they point at another character, must use the handle from `id`, NOT the preset id.
-- `camera`, `from_camera`, and `to_camera` must each be one of the chosen scene's camera presets — these are scene cameras, not character presets.
+- Each shot needs `id` (a string you choose, e.g. "shot_001"), `start`, `end`, and `camera`. The shot's `camera` must be one of the chosen scene's camera presets.
+- `from_camera` and `to_camera` (in `camera_dolly`) must each be one of the chosen scene's camera presets.
 - `preset` in `set_lighting` must be one of the chosen scene's lighting presets — distinct from character presets and camera presets.
 - All times are absolute seconds. Every action's `end` must be greater than its `start`. Action timestamps must fit within the parent shot's window.
 - Use only action types from the available actions list. Respect each action's required and optional parameters.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
 
-# Worked structural example (placeholders — substitute real names from the catalog above)
-
-```json
-"characters": [
-  {{"id": "<your-handle-A>", "preset": "<a-preset-id-from-the-Available-characters-list>", "spawn": "<a-spawn-from-the-chosen-scene>"}},
-  {{"id": "<your-handle-B>", "preset": "<another-preset-id-from-the-Available-characters-list>", "spawn": "<another-spawn>"}}
-]
-```
-
-Then actions reference the handle, not the preset:
-`{{"character": "<your-handle-A>", ...}}`, NOT `{{"character": "<a-preset-id>", ...}}`.
+**Critical: every string value you emit must be either a value from the "Available …" sections above, a handle you invented for the `id` field of a character or shot, or a free text field (like `text` in `talk`). Never emit angle-bracketed placeholders, ALL CAPS slot names, or words from the rules above.**
 """
 
 
