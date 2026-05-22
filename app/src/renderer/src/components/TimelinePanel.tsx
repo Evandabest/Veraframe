@@ -1,14 +1,15 @@
 /**
- * Read-only timeline viewer.
+ * Read-only timeline viewer with click + drag scrubbing.
  *
- * Renders one horizontal lane per character + one for scene-level actions
- * (camera_*, set_lighting). Action blocks are positioned by start/end times
- * scaled to lane width. A vertical playhead line is driven by the host's
- * `currentTimeSec` prop (App.tsx wires this from the <video> element's
- * timeupdate event). Clicking the content column seeks the video.
+ * Layout: a two-column flex row. Left column holds aligned lane labels;
+ * right column holds the ruler, each lane row, and a full-area pointer
+ * overlay that captures scrub gestures. Action blocks and tick labels use
+ * `pointer-events-none` so they never swallow events.
+ *
+ * The red playhead is driven by `currentTimeSec`.
  */
 
-import { Fragment } from 'react'
+import { Fragment, useRef, useState } from 'react'
 
 interface TimelineAction {
   id: string
@@ -96,12 +97,36 @@ export function TimelinePanel({
   const seconds = Math.max(1, Math.ceil(durationSec))
   const ticks = Array.from({ length: seconds + 1 }, (_, i) => i)
 
-  const handleContentClick = (event: React.MouseEvent<HTMLDivElement>): void => {
-    if (!onSeek) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const ratio = (event.clientX - rect.left) / rect.width
+  const scrubRef = useRef<HTMLDivElement | null>(null)
+  const [isScrubbing, setIsScrubbing] = useState(false)
+
+  const seekFromClientX = (clientX: number): void => {
+    if (!onSeek || !scrubRef.current || durationSec <= 0) return
+    const rect = scrubRef.current.getBoundingClientRect()
+    const ratio = (clientX - rect.left) / rect.width
     onSeek(Math.max(0, Math.min(durationSec, ratio * durationSec)))
   }
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsScrubbing(true)
+    seekFromClientX(event.clientX)
+  }
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!isScrubbing) return
+    seekFromClientX(event.clientX)
+  }
+
+  const stopScrubbing = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    setIsScrubbing(false)
+  }
+
+  const playheadPct = durationSec > 0 ? (currentTimeSec / durationSec) * 100 : 0
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
@@ -109,67 +134,104 @@ export function TimelinePanel({
         <h2 className="text-sm font-semibold text-neutral-200">Timeline</h2>
         <span className="text-xs text-neutral-500">
           scene: <span className="text-neutral-300">{tl.scene}</span> · {actions.length} action
-          {actions.length === 1 ? '' : 's'} · {durationSec.toFixed(1)}s
+          {actions.length === 1 ? '' : 's'} · {durationSec.toFixed(1)}s · click or drag to scrub
         </span>
       </div>
 
-      <div className="grid grid-cols-[6rem_1fr] gap-x-2">
-        {/* Ruler row */}
-        <div />
-        <div className="relative h-5 border-b border-neutral-800">
-          {ticks.map((t) => (
+      <div className="flex gap-2">
+        {/* Left: aligned lane labels */}
+        <div className="flex w-24 flex-shrink-0 flex-col gap-1">
+          <div className="h-5" /> {/* spacer aligned with ruler */}
+          {lanes.map((lane) => (
             <div
-              key={t}
-              className="absolute top-0 h-full border-l border-neutral-800 pl-1 text-[10px] text-neutral-500"
-              style={{ left: `${(t / durationSec) * 100}%` }}
+              key={`label-${lane.id}`}
+              className="flex h-8 items-center text-xs text-neutral-400"
             >
-              {t}s
+              {lane.label}
             </div>
           ))}
         </div>
 
-        {/* Lanes */}
-        {lanes.length === 0 && (
-          <>
-            <div />
-            <p className="text-sm text-neutral-500">No actions in this timeline.</p>
-          </>
-        )}
-        {lanes.map((lane) => (
-          <Fragment key={lane.id}>
-            <div className="flex h-8 items-center text-xs text-neutral-400">
-              {lane.label}
-            </div>
-            <div
-              className="relative h-8 cursor-pointer rounded bg-neutral-950/60"
-              onClick={handleContentClick}
-            >
-              {lane.actions.map((action) => {
-                const left = (action.start / durationSec) * 100
-                const width = ((action.end - action.start) / durationSec) * 100
-                const [bg, border] = ACTION_COLORS[action.type] ?? DEFAULT_COLORS
+        {/* Right: ruler + lane rows + scrub overlay + playhead */}
+        <div className="relative flex-1">
+          <div className="flex flex-col gap-1">
+            {/* Ruler — tick line and label are separate elements so the label
+              for the rightmost tick can sit FLUSH-LEFT of its line (with a
+              translateX(-100%)) instead of overflowing the container. */}
+            <div className="pointer-events-none relative h-5 overflow-hidden border-b border-neutral-800">
+              {ticks.map((t) => {
+                const leftPct = (t / durationSec) * 100
+                const isLast = t === ticks[ticks.length - 1]
                 return (
-                  <div
-                    key={action.id}
-                    title={`${action.type} (${action.start.toFixed(1)}s–${action.end.toFixed(1)}s)`}
-                    className={`pointer-events-none absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white`}
-                    style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%` }}
-                  >
-                    {action.type}
-                  </div>
+                  <Fragment key={t}>
+                    <div
+                      className="absolute top-0 h-full w-px bg-neutral-800"
+                      style={{ left: `${leftPct}%` }}
+                    />
+                    <div
+                      className="absolute top-0 text-[10px] text-neutral-500"
+                      style={{
+                        left: `${leftPct}%`,
+                        transform: isLast ? 'translateX(-100%)' : undefined,
+                        paddingLeft: isLast ? 0 : 4,
+                        paddingRight: isLast ? 4 : 0
+                      }}
+                    >
+                      {t}s
+                    </div>
+                  </Fragment>
                 )
               })}
-              {/* Per-lane playhead segment — combined with the others it forms
-                  a vertical red line spanning all lanes. */}
-              {durationSec > 0 && (
-                <div
-                  className="pointer-events-none absolute top-0 bottom-0 w-px bg-red-400"
-                  style={{ left: `${(currentTimeSec / durationSec) * 100}%` }}
-                />
-              )}
             </div>
-          </Fragment>
-        ))}
+
+            {/* Lane rows */}
+            {lanes.length === 0 && (
+              <p className="text-sm text-neutral-500">No actions in this timeline.</p>
+            )}
+            {lanes.map((lane) => (
+              <div
+                key={lane.id}
+                className="pointer-events-none relative h-8 rounded bg-neutral-950/60"
+              >
+                {lane.actions.map((action) => {
+                  const left = (action.start / durationSec) * 100
+                  const width = ((action.end - action.start) / durationSec) * 100
+                  const [bg, border] = ACTION_COLORS[action.type] ?? DEFAULT_COLORS
+                  return (
+                    <div
+                      key={action.id}
+                      title={`${action.type} (${action.start.toFixed(1)}s–${action.end.toFixed(1)}s)`}
+                      className={`pointer-events-none absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white`}
+                      style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%` }}
+                    >
+                      {action.type}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+
+          {/* Scrub overlay — full area of the right column. Sits ABOVE the
+              lanes (z-10) so the pointer-events-none action blocks never
+              swallow gestures. */}
+          <div
+            ref={scrubRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={stopScrubbing}
+            onPointerCancel={stopScrubbing}
+            className={`absolute inset-0 z-10 ${isScrubbing ? 'cursor-grabbing' : 'cursor-pointer'}`}
+            style={{ touchAction: 'none' }}
+          />
+
+          {/* Playhead — above lanes but pointer-events-none so the overlay
+              still receives gestures right under it. */}
+          <div
+            className="pointer-events-none absolute inset-y-0 z-20 w-px bg-red-400"
+            style={{ left: `${playheadPct}%` }}
+          />
+        </div>
       </div>
     </div>
   )
