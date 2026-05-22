@@ -302,7 +302,8 @@ export function TimelinePanel({
       </div>
 
       <div className="flex gap-2">
-        {/* Left: aligned lane labels */}
+        {/* Left: aligned lane labels + the "+ Character" button at the bottom
+            of this column so it sits directly under the character names. */}
         <div className="flex w-24 flex-shrink-0 flex-col gap-1">
           <div className="h-5" /> {/* ruler spacer */}
           {lanes.map((lane) => (
@@ -313,6 +314,16 @@ export function TimelinePanel({
               {lane.label}
             </div>
           ))}
+          {onAddCharacter && (
+            <button
+              type="button"
+              onClick={onAddCharacter}
+              title="Add another character (coming soon)"
+              className="mt-1 flex h-7 w-full items-center justify-center rounded border border-emerald-500 bg-emerald-500/15 text-base font-medium text-emerald-200 transition-colors hover:bg-emerald-500/30"
+            >
+              +
+            </button>
+          )}
         </div>
 
         {/* Right: ruler + lane rows + playhead */}
@@ -457,19 +468,6 @@ export function TimelinePanel({
           })}
         </div>
       </div>
-
-      {/* Wide "+ Character" button at the bottom — spans the full row width
-          and matches the emerald palette used for "extend timeline". */}
-      {onAddCharacter && (
-        <button
-          type="button"
-          onClick={onAddCharacter}
-          title="Add another character (coming soon)"
-          className="mt-1 flex h-7 w-full items-center justify-center rounded border border-emerald-500 bg-emerald-500/15 text-base font-medium text-emerald-200 transition-colors hover:bg-emerald-500/30"
-        >
-          +
-        </button>
-      )}
     </div>
   )
 }
