@@ -70,8 +70,11 @@ interface TimelinePanelProps {
   onEditAction?: (action: TimelineAction, laneId: string) => void
   onAddAction?: (laneId: string, startSec: number) => void
   onAddCharacter?: () => void
+  onRetimeAction?: (action: TimelineAction, newStart: number, newEnd: number) => void
   pendingEdit?: PendingActionEdit | null
 }
+
+const EDGE_HIT_PX = 6
 
 const SCENE_LANE_ID = '__scene__'
 const SCENE_ACTION_TYPES = new Set(['camera_cut', 'camera_dolly', 'set_lighting'])
@@ -108,6 +111,7 @@ export function TimelinePanel({
   onEditAction,
   onAddAction,
   onAddCharacter,
+  onRetimeAction,
   pendingEdit
 }: TimelinePanelProps): React.JSX.Element {
   const tl = asTimeline(timeline)
@@ -149,6 +153,25 @@ export function TimelinePanel({
   const isScrubbingRef = useRef(false)
   const lastPointerXRef = useRef(0)
   const [scrubbingCursor, setScrubbingCursor] = useState(false)
+
+  // Drag-to-retime state. When the user grabs a block edge we enter a separate
+  // mode that bypasses the scrub flow until pointer-up. The "override" holds
+  // the in-progress new start/end so we can render the block at its new
+  // position without committing until release.
+  const retimeRef = useRef<{
+    actionId: string
+    edge: 'start' | 'end'
+    originalStart: number
+    originalEnd: number
+    laneId: string
+    minTime: number
+    maxTime: number
+  } | null>(null)
+  const [retimeOverride, setRetimeOverride] = useState<{
+    actionId: string
+    start: number
+    end: number
+  } | null>(null)
 
   // Drive the playhead at the display refresh rate. While scrubbing, follow
   // the cursor directly so the line never lags. Otherwise read currentTime.
@@ -207,6 +230,57 @@ export function TimelinePanel({
     }
   }
 
+  /** Hit-test a click against a lane's block edges. Returns the block + which
+   * edge if the pointer is within EDGE_HIT_PX of either side; null otherwise. */
+  const resolveEdgeHit = (
+    lane: { id: string; actions: TimelineAction[] },
+    clientX: number,
+    rect: DOMRect
+  ): { action: TimelineAction; edge: 'start' | 'end' } | null => {
+    if (!onRetimeAction) return null
+    const localX = clientX - rect.left
+    for (const action of lane.actions) {
+      const startX = (action.start / displayDuration) * rect.width
+      const endX = (action.end / displayDuration) * rect.width
+      if (Math.abs(localX - endX) <= EDGE_HIT_PX) {
+        return { action, edge: 'end' }
+      }
+      // Prefer end-edge when both edges are within range (thin blocks).
+      if (Math.abs(localX - startX) <= EDGE_HIT_PX) {
+        return { action, edge: 'start' }
+      }
+    }
+    return null
+  }
+
+  /** Clamp a proposed new time so the dragged edge stays within
+   * (previous-block-end, next-block-start) and doesn't collapse the block. */
+  const clampRetime = (
+    laneActions: TimelineAction[],
+    actionId: string,
+    edge: 'start' | 'end',
+    proposedTime: number,
+    originalStart: number,
+    originalEnd: number
+  ): number => {
+    const others = laneActions.filter((a) => a.id !== actionId).sort((a, b) => a.start - b.start)
+    if (edge === 'start') {
+      // Lower bound: 0 or the end of the previous block in the lane.
+      const prev = [...others].reverse().find((a) => a.end <= originalStart)
+      const lo = prev ? prev.end : 0
+      // Upper bound: just before the existing end (with a small epsilon so
+      // duration > 0).
+      const hi = originalEnd - 0.1
+      return Math.max(lo, Math.min(hi, proposedTime))
+    }
+    // edge === 'end'
+    const next = others.find((a) => a.start >= originalEnd)
+    // Upper bound: next block's start, OR free to extend timeline if none.
+    const hi = next ? next.start : Number.POSITIVE_INFINITY
+    const lo = originalStart + 0.1
+    return Math.max(lo, Math.min(hi, proposedTime))
+  }
+
   // Per-lane handlers. We use pointer capture so a drag started inside one
   // lane keeps firing pointermove on that lane even after the cursor moves
   // away — scrub continues smoothly across the whole timeline.
@@ -220,6 +294,29 @@ export function TimelinePanel({
   } => {
     return {
       onPointerDown: (event) => {
+        const rect = event.currentTarget.getBoundingClientRect()
+        // Edge hit-test takes priority over scrubbing — pointer-down on an
+        // edge enters retime mode and stays there until pointer-up.
+        const edgeHit = resolveEdgeHit(lane, event.clientX, rect)
+        if (edgeHit) {
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          retimeRef.current = {
+            actionId: edgeHit.action.id,
+            edge: edgeHit.edge,
+            originalStart: edgeHit.action.start,
+            originalEnd: edgeHit.action.end,
+            laneId: lane.id,
+            minTime: 0,
+            maxTime: 0 // computed per-move
+          }
+          setRetimeOverride({
+            actionId: edgeHit.action.id,
+            start: edgeHit.action.start,
+            end: edgeHit.action.end
+          })
+          return
+        }
         event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
         pointerStartRef.current = { x: event.clientX, y: event.clientY, t: Date.now() }
@@ -229,6 +326,25 @@ export function TimelinePanel({
         setScrubbingCursor(true)
       },
       onPointerMove: (event) => {
+        // Retime takes precedence over scrub.
+        if (retimeRef.current) {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const proposedRatio = (event.clientX - rect.left) / rect.width
+          const proposedTime = Math.max(0, proposedRatio * displayDuration)
+          const r = retimeRef.current
+          const clamped = clampRetime(
+            lane.actions,
+            r.actionId,
+            r.edge,
+            proposedTime,
+            r.originalStart,
+            r.originalEnd
+          )
+          const newStart = r.edge === 'start' ? clamped : r.originalStart
+          const newEnd = r.edge === 'end' ? clamped : r.originalEnd
+          setRetimeOverride({ actionId: r.actionId, start: newStart, end: newEnd })
+          return
+        }
         if (!isScrubbingRef.current) return
         const start = pointerStartRef.current
         if (!isDraggingRef.current && start) {
@@ -247,6 +363,23 @@ export function TimelinePanel({
       onPointerUp: (event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+        // Commit retime if we were in retime mode.
+        if (retimeRef.current && onRetimeAction) {
+          const r = retimeRef.current
+          const action = lane.actions.find((a) => a.id === r.actionId)
+          if (action && retimeOverride) {
+            // Only fire if the times actually changed (avoid trivial renders).
+            if (
+              Math.abs(retimeOverride.start - r.originalStart) > 0.01 ||
+              Math.abs(retimeOverride.end - r.originalEnd) > 0.01
+            ) {
+              onRetimeAction(action, retimeOverride.start, retimeOverride.end)
+            }
+          }
+          retimeRef.current = null
+          setRetimeOverride(null)
+          return
         }
         const wasDrag = isDraggingRef.current
         isScrubbingRef.current = false
@@ -388,17 +521,24 @@ export function TimelinePanel({
                   )}
 
                   {/* Existing action blocks (purely visual — clicks resolved
-                      by the lane's pointer handlers above). */}
+                      by the lane's pointer handlers above). When the user is
+                      dragging an edge, we replace the block's start/end with
+                      the override so it visually tracks the cursor. */}
                   {lane.actions.map((action) => {
-                    const left = (action.start / displayDuration) * 100
-                    const width = ((action.end - action.start) / displayDuration) * 100
+                    const useOverride =
+                      retimeOverride?.actionId === action.id ? retimeOverride : null
+                    const effectiveStart = useOverride ? useOverride.start : action.start
+                    const effectiveEnd = useOverride ? useOverride.end : action.end
+                    const left = (effectiveStart / displayDuration) * 100
+                    const width = ((effectiveEnd - effectiveStart) / displayDuration) * 100
                     const [bg, border] = ACTION_COLORS[action.type] ?? DEFAULT_COLORS
                     const isBeingReplaced = pendingForLane?.originalActionId === action.id
+                    const isBeingRetimed = useOverride !== null
                     return (
                       <div
                         key={action.id}
-                        title={`${action.type} (${action.start.toFixed(1)}s–${action.end.toFixed(1)}s) — click to edit`}
-                        className={`pointer-events-none absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white transition-opacity ${isBeingReplaced ? 'opacity-30' : ''}`}
+                        title={`${action.type} (${effectiveStart.toFixed(1)}s–${effectiveEnd.toFixed(1)}s) — click to edit, drag edges to retime`}
+                        className={`pointer-events-none absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white transition-opacity ${isBeingReplaced ? 'opacity-30' : ''} ${isBeingRetimed ? 'ring-2 ring-emerald-400' : ''}`}
                         style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%` }}
                       >
                         {action.type}

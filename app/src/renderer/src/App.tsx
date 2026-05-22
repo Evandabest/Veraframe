@@ -508,6 +508,69 @@ function App(): React.JSX.Element {
     setActionError(null)
   }
 
+  // Drag-to-retime: user dragged an action block's edge to a new start/end.
+  // We mutate the timeline, compute the affected window (union of the old
+  // and new spans), and trigger an incremental render. If the new end is
+  // past the previous video's end, we append instead of splice.
+  const onRetimeAction = async (
+    action: TimelineAction,
+    newStart: number,
+    newEnd: number
+  ): Promise<void> => {
+    if (state.status !== 'success') return
+    const previousRenderId = state.renderId
+    const previousDurationSec = state.durationSec
+    const tl = JSON.parse(JSON.stringify(state.timeline)) as MutableTimeline
+    const targetShot = tl.shots[0]
+    if (!targetShot) return
+    const oldAction = targetShot.actions.find((a) => a.id === action.id)
+    if (!oldAction) return
+    const oldStart = oldAction.start
+    const oldEnd = oldAction.end
+    oldAction.start = newStart
+    oldAction.end = newEnd
+    if (newEnd > targetShot.end) targetShot.end = newEnd
+
+    // Affected window = union of old and new spans. Anything outside this
+    // can be safely reused from the previous render.
+    const affectedStart = Math.min(oldStart, newStart)
+    const affectedEnd = Math.max(oldEnd, newEnd)
+
+    const isExtension = affectedEnd > previousDurationSec - 0.05
+    const incremental = isExtension
+      ? {
+          previousRenderId,
+          changedWindow: { start: previousDurationSec, end: affectedEnd },
+          operation: 'append' as const
+        }
+      : {
+          previousRenderId,
+          changedWindow: { start: affectedStart, end: affectedEnd },
+          operation: 'splice' as const
+        }
+
+    const startedAt = Date.now()
+    setState({ status: 'running', startedAt })
+    const response = await window.veraframe.render({
+      mode: 'direct',
+      timeline: tl as unknown as Record<string, unknown>,
+      incremental
+    })
+    const elapsedMs = Date.now() - startedAt
+    if (response.ok) {
+      setState({
+        status: 'success',
+        renderId: response.renderId,
+        videoUrl: response.videoUrl,
+        durationSec: response.durationSec,
+        timeline: response.timeline,
+        elapsedMs
+      })
+    } else {
+      setState({ status: 'error', message: response.error, elapsedMs })
+    }
+  }
+
   // "+ Character" mid-edit. Adds a new character + a full-shot idle to the
   // current timeline, then triggers a FULL re-render (a new character changes
   // every frame, so incremental splice/append can't help us).
@@ -899,6 +962,7 @@ function App(): React.JSX.Element {
                 onEditAction={onEditAction}
                 onAddAction={onAddAction}
                 onAddCharacter={openAddCharacter}
+                onRetimeAction={onRetimeAction}
                 pendingEdit={pendingEditForPanel}
               />
             </>
