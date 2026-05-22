@@ -1,7 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, net, dialog } from 'electron'
-import { copyFile } from 'fs/promises'
+import { app, shell, BrowserWindow, ipcMain, protocol, dialog } from 'electron'
+import { createReadStream } from 'fs'
+import { copyFile, stat } from 'fs/promises'
 import { join } from 'path'
-import { pathToFileURL } from 'url'
+import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { startDaemon, type DaemonHandle } from './daemon'
@@ -100,15 +101,56 @@ app.whenReady().then(async () => {
 
   ipcMain.on('ping', () => console.log('pong'))
 
-  // Serve rendered MP4s under veraframe-render://<id>/video.mp4
-  protocol.handle('veraframe-render', (request) => {
+  // Serve rendered MP4s under veraframe-render://<id>/video.mp4.
+  // Implements HTTP Range requests so the <video> element can seek. Without
+  // Range support every video.currentTime = T request returns the whole file
+  // and the browser resets playback to 0 — breaking both the timeline scrubber
+  // and the native player controls.
+  protocol.handle('veraframe-render', async (request) => {
     const url = new URL(request.url)
     const renderId = url.hostname
     const filePath = renderedVideos.get(renderId)
     if (!filePath) {
       return new Response('not found', { status: 404 })
     }
-    return net.fetch(pathToFileURL(filePath).toString())
+    let fileSize: number
+    try {
+      const info = await stat(filePath)
+      fileSize = info.size
+    } catch {
+      return new Response('file missing', { status: 404 })
+    }
+
+    const rangeHeader = request.headers.get('range')
+    const rangeMatch = rangeHeader ? rangeHeader.match(/bytes=(\d+)-(\d*)/) : null
+    if (rangeMatch) {
+      const start = Number.parseInt(rangeMatch[1], 10)
+      const end = rangeMatch[2] ? Number.parseInt(rangeMatch[2], 10) : fileSize - 1
+      const safeEnd = Math.min(end, fileSize - 1)
+      const chunkSize = safeEnd - start + 1
+      const stream = createReadStream(filePath, { start, end: safeEnd })
+      return new Response(Readable.toWeb(stream) as ReadableStream, {
+        status: 206,
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Accept-Ranges': 'bytes',
+          'Content-Range': `bytes ${start}-${safeEnd}/${fileSize}`,
+          'Content-Length': String(chunkSize)
+        }
+      })
+    }
+
+    // Full-file response — also advertise Accept-Ranges so the browser knows
+    // it can issue Range requests for subsequent seeks.
+    const stream = createReadStream(filePath)
+    return new Response(Readable.toWeb(stream) as ReadableStream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'video/mp4',
+        'Accept-Ranges': 'bytes',
+        'Content-Length': String(fileSize)
+      }
+    })
   })
 
   // Load asset registry — used to build mock timelines and resolve fbx paths.
