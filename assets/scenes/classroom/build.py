@@ -69,6 +69,24 @@ def _import_classroom() -> None:
     bpy.ops.import_scene.fbx(filepath=str(FBX_PATH), use_image_search=True)
 
 
+def _hide_decorative_props() -> list[str]:
+    """Hide FBX props that render as opaque planes instead of their intended
+    effect — e.g. the artist's "godray" cubes (fake sunbeam planes) end up as
+    cream-colored sheets cluttering the camera view."""
+    hidden: list[str] = []
+    for obj in bpy.data.objects:
+        if obj.type != "MESH":
+            continue
+        material_names = {
+            s.material.name for s in obj.material_slots if s.material is not None
+        }
+        if material_names & {"godray"}:
+            obj.hide_render = True
+            obj.hide_viewport = True
+            hidden.append(obj.name)
+    return hidden
+
+
 def _rebind_textures() -> int:
     """Point every Image datablock at the matching file in `textures/`.
 
@@ -174,6 +192,8 @@ def build() -> None:
     _import_classroom()
     rebound = _rebind_textures()
     print(f"[build] rebound {rebound} texture images")
+    hidden = _hide_decorative_props()
+    print(f"[build] hid {len(hidden)} decorative prop(s): {hidden}")
 
     _add_sun("KeyLight", energy=4.0)
     _add_area("CeilingFill", location=(0.0, 0.0, 3.0), energy=80.0)
