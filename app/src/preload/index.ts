@@ -61,6 +61,8 @@ export interface AddSceneRequest {
 
 export interface AddCharacterRequest {
   sourcePath: string
+  idlePath: string
+  walkPath: string
   id: string
   displayName: string
   description?: string
@@ -144,6 +146,10 @@ const veraframe = {
     ipcRenderer.invoke('addScene', request),
   addCharacter: (request: AddCharacterRequest): Promise<AddAssetResponse> =>
     ipcRenderer.invoke('addCharacter', request),
+  removeScene: (id: string): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('removeScene', id),
+  removeCharacter: (id: string): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('removeCharacter', id),
   onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
       callback(payload)

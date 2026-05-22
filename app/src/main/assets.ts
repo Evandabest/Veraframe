@@ -14,6 +14,10 @@ export interface CharacterManifest {
   displayName: string
   meshPath: string
   rigType: string
+  /** Per-character animation FBX paths. Keys match the global animation ids
+   *  the executor expects ("idle", "walk_in_place", etc.). When non-empty
+   *  these override the global animations registry for this character. */
+  animations: Record<string, string>
 }
 
 export interface AnimationManifest {
@@ -54,12 +58,20 @@ export function loadAssets(assetsDir: string, userAssetsDir?: string): AssetRegi
     loadGroup<CharacterManifest>(
       resolvePath(dir, 'characters'),
       'character.json',
-      (raw, d) => ({
-        id: String(raw.id),
-        displayName: String(raw.display_name ?? raw.id),
-        meshPath: resolvePath(d, String(raw.mesh_file)),
-        rigType: String(raw.rig_type ?? 'mixamo')
-      })
+      (raw, d) => {
+        const rawAnims = (raw.animations ?? {}) as Record<string, unknown>
+        const animations: Record<string, string> = {}
+        for (const [k, v] of Object.entries(rawAnims)) {
+          if (typeof v === 'string' && v.length > 0) animations[k] = resolvePath(d, v)
+        }
+        return {
+          id: String(raw.id),
+          displayName: String(raw.display_name ?? raw.id),
+          meshPath: resolvePath(d, String(raw.mesh_file)),
+          rigType: String(raw.rig_type ?? 'mixamo'),
+          animations
+        }
+      }
     )
   const scanAnimations = (dir: string): Record<string, AnimationManifest> =>
     loadGroup<AnimationManifest>(

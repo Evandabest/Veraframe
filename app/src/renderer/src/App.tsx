@@ -96,6 +96,28 @@ function App(): React.JSX.Element {
     await refreshRegistry()
   }
 
+  const onRemoveScene = async (id: string): Promise<void> => {
+    const scene = registry.scenes.find((s) => s.id === id)
+    if (!scene) return
+    if (!window.confirm(`Remove the user-uploaded scene "${scene.displayName}"? This deletes its files.`)) {
+      return
+    }
+    const response = await window.veraframe.removeScene(id)
+    if (response.ok) await refreshRegistry()
+    else window.alert(`Remove failed: ${response.error}`)
+  }
+
+  const onRemoveCharacter = async (id: string): Promise<void> => {
+    const character = registry.characters.find((c) => c.id === id)
+    if (!character) return
+    if (!window.confirm(`Remove the user-uploaded character "${character.displayName}"? This deletes its files.`)) {
+      return
+    }
+    const response = await window.veraframe.removeCharacter(id)
+    if (response.ok) await refreshRegistry()
+    else window.alert(`Remove failed: ${response.error}`)
+  }
+
   const [provider, setProvider] = useState<LLMProvider>('openai')
   const [model, setModel] = useState<string>(PROVIDER_DEFAULT_MODEL.openai)
   // Hardcoded localhost; advanced users can set OLLAMA_API_BASE in their shell.
@@ -431,6 +453,8 @@ function App(): React.JSX.Element {
           onToggleCharacter={onToggleCharacter}
           onAddScene={() => setUploadKind('scene')}
           onAddCharacter={() => setUploadKind('character')}
+          onRemoveScene={onRemoveScene}
+          onRemoveCharacter={onRemoveCharacter}
           onRefresh={refreshRegistry}
           disabled={isRunning}
         />

@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, dialog } from 'electron'
-import { copyFile, mkdir, open, readFile, stat, writeFile } from 'fs/promises'
+import { copyFile, mkdir, open, readFile, rm, stat, writeFile } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { join, resolve as resolvePath } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -455,7 +455,14 @@ app.whenReady().then(async () => {
     'addCharacter',
     async (
       _event,
-      payload: { sourcePath: string; id: string; displayName: string; description?: string }
+      payload: {
+        sourcePath: string
+        idlePath: string
+        walkPath: string
+        id: string
+        displayName: string
+        description?: string
+      }
     ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
       if (!/^[a-z0-9_]+$/i.test(payload.id)) {
         return { ok: false, error: "id must be alphanumeric / underscore only" }
@@ -464,13 +471,21 @@ app.whenReady().then(async () => {
       try {
         await mkdir(charDir, { recursive: true })
         const fbxDest = resolvePath(charDir, 'character.fbx')
+        const idleDest = resolvePath(charDir, 'idle.fbx')
+        const walkDest = resolvePath(charDir, 'walk_in_place.fbx')
         await copyFile(payload.sourcePath, fbxDest)
+        await copyFile(payload.idlePath, idleDest)
+        await copyFile(payload.walkPath, walkDest)
         const manifest = {
           id: payload.id,
           display_name: payload.displayName,
           description: payload.description ?? '',
           mesh_file: 'character.fbx',
-          rig_type: 'mixamo'
+          rig_type: 'mixamo',
+          animations: {
+            idle: 'idle.fbx',
+            walk_in_place: 'walk_in_place.fbx'
+          }
         }
         await writeFile(
           resolvePath(charDir, 'character.json'),
@@ -484,6 +499,35 @@ app.whenReady().then(async () => {
       }
     }
   )
+
+  // Asset removal — only allowed for user-provided entries (those whose paths
+  // live under userAssetsDir). The repo-bundled assets are read-only from the
+  // app's perspective.
+  const removeAsset = async (
+    kind: 'scene' | 'character',
+    id: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    if (!assets) return { ok: false, error: 'asset registry not loaded' }
+    const target =
+      kind === 'scene'
+        ? assets.scenes[id]?.blendPath
+        : assets.characters[id]?.meshPath
+    if (!target) return { ok: false, error: `${kind} '${id}' not found` }
+    if (!target.startsWith(userAssetsDir)) {
+      return { ok: false, error: `${kind} '${id}' is a bundled asset and cannot be removed` }
+    }
+    const folder = resolvePath(target, '..')
+    try {
+      await rm(folder, { recursive: true, force: true })
+      assets = reloadAssets()
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
+  ipcMain.handle('removeScene', async (_event, id: string) => removeAsset('scene', id))
+  ipcMain.handle('removeCharacter', async (_event, id: string) => removeAsset('character', id))
 
   ipcMain.handle(
     'enhancePrompt',

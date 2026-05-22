@@ -38,11 +38,20 @@ class ExecutorError(RuntimeError):
 _HANDLE_PROP = "veraframe_handle"
 
 
-def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
+def execute_timeline(
+    timeline: dict,
+    asset_paths: dict,
+    fps: int = 24,
+    character_assets: dict | None = None,
+) -> dict:
     """Apply the timeline to currently-loaded characters.
 
-    `asset_paths` maps animation IDs (matching `animation.json` `id` fields)
-    to absolute FBX paths so the daemon doesn't have to know the asset layout.
+    `asset_paths` is the global animation map (id → absolute FBX path).
+    `character_assets` is an optional per-character override map keyed by
+    character handle (the timeline's character id, not the preset). When a
+    character has its own entry, the dispatcher uses it instead of the
+    global map — needed because user-uploaded characters can come with
+    their own idle / walk FBX files baked against a non-shared rig.
 
     Returns `{executed: [...], skipped: [...], fps: <n>}` — every action in
     the timeline appears in exactly one of those lists.
@@ -51,6 +60,14 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
         raise ExecutorError("bpy unavailable")
 
     characters = _index_characters_by_handle()
+    char_assets = character_assets or {}
+
+    def _resolve(char_id: str, anim_id: str) -> str | None:
+        """Per-character override first, then the global asset map."""
+        per_char = char_assets.get(char_id, {})
+        if isinstance(per_char, dict) and per_char.get(anim_id):
+            return per_char[anim_id]
+        return asset_paths.get(anim_id)
 
     executed: list[dict] = []
     skipped: list[dict] = []
@@ -61,11 +78,11 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
             action_id = action.get("id", "?")
 
             if atype == "idle":
-                _dispatch_idle(action, characters, asset_paths, fps, executed, skipped)
+                _dispatch_idle(action, characters, _resolve, fps, executed, skipped)
                 continue
 
             if atype == "walk_to":
-                _dispatch_walk_to(action, characters, asset_paths, fps, executed, skipped)
+                _dispatch_walk_to(action, characters, _resolve, fps, executed, skipped)
                 continue
 
             if atype == "look_at":
@@ -118,7 +135,7 @@ def execute_timeline(timeline: dict, asset_paths: dict, fps: int = 24) -> dict:
 def _dispatch_idle(
     action: dict,
     characters: dict,
-    asset_paths: dict,
+    resolve_anim,
     fps: int,
     executed: list[dict],
     skipped: list[dict],
@@ -136,7 +153,7 @@ def _dispatch_idle(
         )
         return
 
-    fbx_path = asset_paths.get("idle")
+    fbx_path = resolve_anim(char_id, "idle")
     if not fbx_path:
         skipped.append(
             {
@@ -168,7 +185,7 @@ def _dispatch_idle(
 def _dispatch_walk_to(
     action: dict,
     characters: dict,
-    asset_paths: dict,
+    resolve_anim,
     fps: int,
     executed: list[dict],
     skipped: list[dict],
@@ -202,7 +219,7 @@ def _dispatch_walk_to(
         return
     target_location = (target_obj.location.x, target_obj.location.y, target_obj.location.z)
 
-    fbx_path = asset_paths.get("walk_in_place")
+    fbx_path = resolve_anim(char_id, "walk_in_place")
     if not fbx_path:
         skipped.append(
             {

@@ -27,7 +27,12 @@ export function AssetUploadModal({
   onClose,
   onSubmitted
 }: AssetUploadModalProps): React.JSX.Element | null {
+  // The primary file (mesh for characters, .blend for scenes) is auto-picked
+  // when the modal opens. The two character-only animations are picked on
+  // demand via their own buttons.
   const [filePath, setFilePath] = useState<string | null>(null)
+  const [idlePath, setIdlePath] = useState<string | null>(null)
+  const [walkPath, setWalkPath] = useState<string | null>(null)
   const [pickerError, setPickerError] = useState<string | null>(null)
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -41,6 +46,8 @@ export function AssetUploadModal({
   useEffect(() => {
     if (!open) return
     setFilePath(null)
+    setIdlePath(null)
+    setWalkPath(null)
     setPickerError(null)
     setId('')
     setDisplayName('')
@@ -68,13 +75,21 @@ export function AssetUploadModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind])
 
+  const pickAuxFile = async (
+    setter: (p: string) => void
+  ): Promise<void> => {
+    const result = await window.veraframe.pickAssetFile('character')
+    if (result.ok) setter(result.filePath)
+  }
+
   if (!open) return null
 
   const canSubmit =
     !!filePath &&
     /^[a-z0-9_]+$/i.test(id) &&
     displayName.trim().length > 0 &&
-    (kind !== 'scene' || spawnPoints.trim().length > 0)
+    (kind !== 'scene' || spawnPoints.trim().length > 0) &&
+    (kind !== 'character' || (!!idlePath && !!walkPath))
 
   const onSubmit = async (): Promise<void> => {
     if (!filePath) return
@@ -101,6 +116,8 @@ export function AssetUploadModal({
             })
           : await window.veraframe.addCharacter({
               sourcePath: filePath,
+              idlePath: idlePath!,
+              walkPath: walkPath!,
               id,
               displayName,
               description: description || undefined
@@ -131,7 +148,7 @@ export function AssetUploadModal({
           <p className="mt-1 text-xs text-neutral-400">
             {kind === 'scene'
               ? 'Pick a .blend file; we’ll copy it to the user-data dir and write a manifest. The names you give for spawn points and cameras must match the Empty / Camera object names inside the .blend.'
-              : 'Pick a .fbx file with a Mixamo-style rig. The character will become available in the picker for the LLM to use.'}
+              : 'Pick a .fbx mesh + your own idle.fbx and walk.fbx animations. The rig must be Mixamo-style (matching bone names) so the animation library binds correctly.'}
           </p>
         </header>
 
@@ -199,6 +216,23 @@ export function AssetUploadModal({
                 </Field>
               </>
             )}
+
+            {kind === 'character' && (
+              <>
+                <FilePickerField
+                  label="Idle animation (.fbx)"
+                  hint="Mixamo-style idle clip. Bone names must match the mesh rig."
+                  value={idlePath}
+                  onPick={() => pickAuxFile(setIdlePath)}
+                />
+                <FilePickerField
+                  label="Walk animation (.fbx)"
+                  hint="Mixamo walk-in-place clip (no root motion). The executor adds the translation curve."
+                  value={walkPath}
+                  onPick={() => pickAuxFile(setWalkPath)}
+                />
+              </>
+            )}
           </div>
         )}
 
@@ -240,6 +274,37 @@ function Field({
     <div className="flex flex-col gap-1">
       <label className="text-xs text-neutral-400">{label}</label>
       {children}
+      {hint && <span className="text-[10px] text-neutral-500">{hint}</span>}
+    </div>
+  )
+}
+
+function FilePickerField({
+  label,
+  hint,
+  value,
+  onPick
+}: {
+  label: string
+  hint: string
+  value: string | null
+  onPick: () => void
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-neutral-400">{label}</label>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onPick}
+          className="rounded border border-neutral-700 bg-neutral-950 px-3 py-1 text-xs text-neutral-200 hover:border-neutral-500"
+        >
+          {value ? 'Change…' : 'Pick file…'}
+        </button>
+        <span className="flex-1 truncate font-mono text-[11px] text-neutral-500" title={value ?? ''}>
+          {value ?? '(none picked)'}
+        </span>
+      </div>
       {hint && <span className="text-[10px] text-neutral-500">{hint}</span>}
     </div>
   )

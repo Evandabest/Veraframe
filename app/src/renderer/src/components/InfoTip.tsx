@@ -35,7 +35,7 @@ export function InfoTip({ label, children }: InfoTipProps): React.JSX.Element {
         onClick={() => setOpen((v) => !v)}
         aria-label={label}
         title={label}
-        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-neutral-600 text-[10px] font-bold leading-none text-neutral-400 hover:border-neutral-300 hover:text-neutral-100"
+        className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-neutral-600 text-[11px] font-bold leading-none text-neutral-400 hover:border-neutral-300 hover:text-neutral-100"
       >
         i
       </button>

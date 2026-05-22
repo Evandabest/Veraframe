@@ -23,6 +23,8 @@ export interface AssetsPanelProps {
   onToggleCharacter: (id: string, checked: boolean) => void
   onAddScene: () => void
   onAddCharacter: () => void
+  onRemoveScene: (id: string) => void
+  onRemoveCharacter: (id: string) => void
   onRefresh: () => void
   disabled?: boolean
 }
@@ -36,6 +38,8 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
     onToggleCharacter,
     onAddScene,
     onAddCharacter,
+    onRemoveScene,
+    onRemoveCharacter,
     onRefresh,
     disabled = false
   } = props
@@ -60,6 +64,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
         selectedSceneId={selectedSceneId}
         onSelectScene={onSelectScene}
         onAddScene={onAddScene}
+        onRemoveScene={onRemoveScene}
         disabled={disabled}
       />
 
@@ -68,6 +73,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
         selectedCharacterIds={selectedCharacterIds}
         onToggleCharacter={onToggleCharacter}
         onAddCharacter={onAddCharacter}
+        onRemoveCharacter={onRemoveCharacter}
         disabled={disabled}
       />
     </div>
@@ -79,6 +85,7 @@ interface SceneRowProps {
   selectedSceneId: string | null
   onSelectScene: (id: string) => void
   onAddScene: () => void
+  onRemoveScene: (id: string) => void
   disabled: boolean
 }
 
@@ -87,14 +94,16 @@ function SceneRow({
   selectedSceneId,
   onSelectScene,
   onAddScene,
+  onRemoveScene,
   disabled
 }: SceneRowProps): React.JSX.Element {
   const selectedScene = scenes.find((s) => s.id === selectedSceneId) ?? null
+  const canRemoveSelected = Boolean(selectedScene && selectedScene.userProvided)
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <label className="text-xs font-medium text-neutral-300">Scene</label>
+        <label className="text-sm font-medium leading-none text-neutral-300">Scene</label>
         <InfoTip label="What a scene needs">
           <p className="font-semibold text-neutral-100">Scenes</p>
           <p className="mt-1">
@@ -145,6 +154,17 @@ function SceneRow({
         >
           + Add
         </button>
+        {canRemoveSelected && selectedScene && (
+          <button
+            type="button"
+            onClick={() => onRemoveScene(selectedScene.id)}
+            disabled={disabled}
+            title={`Remove ${selectedScene.displayName}`}
+            className="rounded-md border border-red-500/60 bg-red-500/10 px-2 py-1 text-xs text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+          >
+            ×
+          </button>
+        )}
       </div>
       {selectedScene && (
         <p className="text-[11px] text-neutral-500">
@@ -161,6 +181,7 @@ interface CharacterRowProps {
   selectedCharacterIds: string[]
   onToggleCharacter: (id: string, checked: boolean) => void
   onAddCharacter: () => void
+  onRemoveCharacter: (id: string) => void
   disabled: boolean
 }
 
@@ -169,6 +190,7 @@ function CharacterRow({
   selectedCharacterIds,
   onToggleCharacter,
   onAddCharacter,
+  onRemoveCharacter,
   disabled
 }: CharacterRowProps): React.JSX.Element {
   const selectedSet = new Set(selectedCharacterIds)
@@ -176,7 +198,7 @@ function CharacterRow({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <label className="text-xs font-medium text-neutral-300">Characters</label>
+        <label className="text-sm font-medium leading-none text-neutral-300">Characters</label>
         <InfoTip label="What a character needs">
           <p className="font-semibold text-neutral-100">Characters</p>
           <p className="mt-1">
@@ -216,26 +238,41 @@ function CharacterRow({
         {characters.map((c) => {
           const checked = selectedSet.has(c.id)
           return (
-            <label
+            <div
               key={c.id}
               className={`flex items-center gap-1.5 rounded border px-2 py-1 text-xs ${
                 checked
                   ? 'border-blue-500 bg-blue-500/15 text-blue-100'
                   : 'border-neutral-700 bg-neutral-950 text-neutral-300'
-              } ${disabled ? 'opacity-50' : 'cursor-pointer hover:border-neutral-500'}`}
+              } ${disabled ? 'opacity-50' : ''}`}
             >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(e) => onToggleCharacter(c.id, e.target.checked)}
-                disabled={disabled}
-                className="h-3 w-3 accent-blue-500"
-              />
-              <span>
-                {c.displayName}
-                {c.userProvided ? ' (yours)' : ''}
-              </span>
-            </label>
+              <label
+                className={`flex items-center gap-1.5 ${disabled ? '' : 'cursor-pointer'}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => onToggleCharacter(c.id, e.target.checked)}
+                  disabled={disabled}
+                  className="h-3 w-3 accent-blue-500"
+                />
+                <span>
+                  {c.displayName}
+                  {c.userProvided ? ' (yours)' : ''}
+                </span>
+              </label>
+              {c.userProvided && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveCharacter(c.id)}
+                  disabled={disabled}
+                  title={`Remove ${c.displayName}`}
+                  className="ml-1 rounded text-red-300 hover:text-red-100 disabled:opacity-50"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           )
         })}
         <button

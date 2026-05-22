@@ -82,6 +82,12 @@ export async function runTimeline(
   emit({ step: 'load_scene', detail: sceneId })
   await daemon.call('load_scene', { blend_path: scene.blendPath })
 
+  // Build per-character animation overrides. When a character has its own
+  // idle.fbx / walk.fbx (user-uploaded), the executor uses those instead of
+  // the global ones. Keyed by the timeline's character handle (id), not the
+  // preset id, because actions reference characters by handle.
+  const characterAssets: Record<string, Record<string, string>> = {}
+
   const characters = (timeline.characters ?? []) as Array<Record<string, unknown>>
   for (let i = 0; i < characters.length; i += 1) {
     const character = characters[i]
@@ -96,12 +102,16 @@ export async function runTimeline(
       spawn_point: String(character.spawn),
       handle: String(character.id)
     })
+    if (preset.animations && Object.keys(preset.animations).length > 0) {
+      characterAssets[String(character.id)] = preset.animations
+    }
   }
 
   emit({ step: 'execute_timeline' })
   const execResult = (await daemon.call('execute_timeline', {
     timeline,
     asset_paths: assetPaths,
+    character_assets: characterAssets,
     fps
   })) as { executed: unknown[]; skipped: unknown[] }
 
