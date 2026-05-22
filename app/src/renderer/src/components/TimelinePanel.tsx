@@ -275,46 +275,29 @@ export function TimelinePanel({
     seekFromClientX(event.clientX)
   }
 
-  // Lane "+" button: always shown. Sits at the end of the lane's content. If
-  // the lane is already full to durationSec, the new action starts at the
-  // current end and extends the video. Position uses displayDuration so the
-  // button is correctly placed even when a pending edit has stretched the
-  // visible canvas.
-  const addButtonFor = (lane: { id: string; actions: TimelineAction[] }): {
+  // Compute the start time for a lane's "+" button. Lives in its own
+  // gutter column (right of the lane content), so we don't need an X
+  // position — just where in the timeline a new action should start. If the
+  // lane has trailing room before durationSec, fill that; otherwise start at
+  // the current end and the timeline will extend on accept.
+  const addButtonStart = (lane: { id: string; actions: TimelineAction[] }): {
     startSec: number
-    leftPct: number
     extending: boolean
   } | null => {
     if (!onAddAction) return null
     const lastEnd = lane.actions.reduce((acc, a) => Math.max(acc, a.end), 0)
     const startSec = Math.max(lastEnd, durationSec)
     const extending = startSec >= durationSec - 0.05
-    return {
-      startSec,
-      leftPct: (startSec / displayDuration) * 100,
-      extending
-    }
+    return { startSec, extending }
   }
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-neutral-200">Timeline</h2>
-        <div className="flex items-baseline gap-3 text-xs text-neutral-500">
-          <span>
-            scene: <span className="text-neutral-300">{tl.scene}</span> · {actions.length} action
-            {actions.length === 1 ? '' : 's'} · {durationSec.toFixed(1)}s
-          </span>
-          {onAddCharacter && (
-            <button
-              type="button"
-              onClick={onAddCharacter}
-              className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
-              title="Coming soon"
-            >
-              + Character
-            </button>
-          )}
+        <div className="text-xs text-neutral-500">
+          scene: <span className="text-neutral-300">{tl.scene}</span> · {actions.length} action
+          {actions.length === 1 ? '' : 's'} · {durationSec.toFixed(1)}s
         </div>
       </div>
 
@@ -366,13 +349,13 @@ export function TimelinePanel({
               })}
             </div>
 
-            {/* Lane rows */}
+            {/* Lane rows — no per-row + buttons here; they live in the
+                rightmost gutter column so they never overflow the canvas. */}
             {lanes.length === 0 && (
               <p className="text-sm text-neutral-500">No actions in this timeline.</p>
             )}
             {lanes.map((lane) => {
               const handlers = makeLaneHandlers(lane)
-              const addBtn = addButtonFor(lane)
               const pendingForLane = pendingEdit?.laneId === lane.id ? pendingEdit : null
               return (
                 <div
@@ -429,33 +412,6 @@ export function TimelinePanel({
                       </div>
                     )
                   })()}
-
-                  {/* "+" button at the end of the lane — pointer-events-auto
-                      and stops propagation so the lane's gestures don't fire. */}
-                  {addBtn && (
-                    <button
-                      type="button"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onPointerUp={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onAddAction?.(lane.id, addBtn.startSec)
-                      }}
-                      title={
-                        addBtn.extending
-                          ? `Extend timeline past ${durationSec.toFixed(1)}s`
-                          : `Add action at ${addBtn.startSec.toFixed(1)}s`
-                      }
-                      className={`absolute top-1 z-30 flex h-6 w-6 items-center justify-center rounded border text-sm transition-colors ${
-                        addBtn.extending
-                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/40'
-                          : 'border-dashed border-neutral-500 bg-neutral-900/80 text-neutral-300 hover:border-neutral-300 hover:text-white'
-                      }`}
-                      style={{ left: `calc(${addBtn.leftPct}% + 4px)` }}
-                    >
-                      +
-                    </button>
-                  )}
                 </div>
               )
             })}
@@ -468,7 +424,52 @@ export function TimelinePanel({
             style={{ willChange: 'transform' }}
           />
         </div>
+
+        {/* Right gutter: per-lane "+" buttons, vertically aligned with their
+            lane rows. Lives outside the timeline canvas so it never overflows
+            the right edge. */}
+        <div className="flex w-8 flex-shrink-0 flex-col gap-1">
+          <div className="h-5" /> {/* ruler spacer */}
+          {lanes.map((lane) => {
+            const addBtn = addButtonStart(lane)
+            return (
+              <div key={`add-${lane.id}`} className="flex h-8 items-center justify-center">
+                {addBtn && (
+                  <button
+                    type="button"
+                    onClick={() => onAddAction?.(lane.id, addBtn.startSec)}
+                    title={
+                      addBtn.extending
+                        ? `Extend timeline past ${durationSec.toFixed(1)}s`
+                        : `Add action at ${addBtn.startSec.toFixed(1)}s`
+                    }
+                    className={`flex h-6 w-6 items-center justify-center rounded border text-sm transition-colors ${
+                      addBtn.extending
+                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/40'
+                        : 'border-dashed border-neutral-500 bg-neutral-900/80 text-neutral-300 hover:border-neutral-300 hover:text-white'
+                    }`}
+                  >
+                    +
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
+
+      {/* Wide "+ Character" button at the bottom — spans the full row width
+          and matches the emerald palette used for "extend timeline". */}
+      {onAddCharacter && (
+        <button
+          type="button"
+          onClick={onAddCharacter}
+          title="Add another character (coming soon)"
+          className="mt-1 flex h-7 w-full items-center justify-center rounded border border-emerald-500 bg-emerald-500/15 text-base font-medium text-emerald-200 transition-colors hover:bg-emerald-500/30"
+        >
+          +
+        </button>
+      )}
     </div>
   )
 }
