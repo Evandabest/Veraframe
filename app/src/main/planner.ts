@@ -88,6 +88,9 @@ function runPythonEntry<T>(
     if (options.provider) env.VERAFRAME_LLM_PROVIDER = options.provider
     if (options.model) env.VERAFRAME_LLM_MODEL = options.model
     if (options.ollamaHost) env.OLLAMA_API_BASE = options.ollamaHost
+    // Silence LiteLLM's import-time WARNING noise (bedrock/sagemaker pre-load
+    // hints, etc.). The validator still surfaces real errors via stderr.
+    env.LITELLM_LOG = env.LITELLM_LOG ?? 'ERROR'
     const child = spawn('uv', args, { stdio: ['ignore', 'pipe', 'pipe'], env })
     let stdout = ''
     let stderr = ''
