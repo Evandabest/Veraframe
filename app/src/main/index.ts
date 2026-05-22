@@ -681,6 +681,82 @@ app.whenReady().then(async () => {
   ipcMain.handle('removeScene', async (_event, id: string) => removeAsset('scene', id))
   ipcMain.handle('removeCharacter', async (_event, id: string) => removeAsset('character', id))
 
+  // -------------------------------------------------------------------------
+  // Project file (.veraframe) save / open.
+  //
+  // A project is a snapshot of editor state — scene + character selections,
+  // prompt + provider/model, and the last-rendered timeline JSON (if any).
+  // The rendered video is NOT bundled; it lives in tmpdir and is regenerated
+  // on demand. Opening a project with a stored timeline triggers a direct-
+  // mode re-render to materialize the MP4.
+  // -------------------------------------------------------------------------
+
+  interface ProjectFile {
+    version: 1
+    /** ISO timestamp when this project was saved. */
+    savedAt: string
+    selectedScene: string | null
+    selectedCharacters: string[]
+    prompt: string
+    mode: 'mock' | 'llm'
+    provider: string
+    model: string
+    /** Optional last-rendered timeline JSON. */
+    timeline: Record<string, unknown> | null
+  }
+
+  ipcMain.handle(
+    'saveProject',
+    async (
+      _event,
+      payload: Omit<ProjectFile, 'version' | 'savedAt'>
+    ): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+      const result = await dialog.showSaveDialog({
+        title: 'Save project',
+        defaultPath: 'untitled.veraframe',
+        filters: [{ name: 'Veraframe project', extensions: ['veraframe', 'json'] }]
+      })
+      if (result.canceled || !result.filePath) {
+        return { ok: false, error: 'save canceled' }
+      }
+      try {
+        const file: ProjectFile = {
+          version: 1,
+          savedAt: new Date().toISOString(),
+          ...payload
+        }
+        await writeFile(result.filePath, JSON.stringify(file, null, 2), 'utf8')
+        return { ok: true, path: result.filePath }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'openProject',
+    async (): Promise<{ ok: true; project: ProjectFile; path: string } | { ok: false; error: string }> => {
+      const result = await dialog.showOpenDialog({
+        title: 'Open project',
+        properties: ['openFile'],
+        filters: [{ name: 'Veraframe project', extensions: ['veraframe', 'json'] }]
+      })
+      if (result.canceled || !result.filePaths[0]) {
+        return { ok: false, error: 'open canceled' }
+      }
+      try {
+        const raw = await readFile(result.filePaths[0], 'utf8')
+        const parsed = JSON.parse(raw) as ProjectFile
+        if (parsed.version !== 1) {
+          return { ok: false, error: `unsupported project version: ${parsed.version}` }
+        }
+        return { ok: true, project: parsed, path: result.filePaths[0] }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
   ipcMain.handle(
     'enhancePrompt',
     async (

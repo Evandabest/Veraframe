@@ -77,6 +77,26 @@ export interface UpdateCharacterRequest {
   description?: string | null
 }
 
+export interface ProjectFile {
+  version: 1
+  savedAt: string
+  selectedScene: string | null
+  selectedCharacters: string[]
+  prompt: string
+  mode: 'mock' | 'llm'
+  provider: string
+  model: string
+  timeline: Record<string, unknown> | null
+}
+
+export type SaveProjectResponse =
+  | { ok: true; path: string }
+  | { ok: false; error: string }
+
+export type OpenProjectResponse =
+  | { ok: true; project: ProjectFile; path: string }
+  | { ok: false; error: string }
+
 export type PickCharacterFolderResponse =
   | {
       ok: true
@@ -176,6 +196,10 @@ const veraframe = {
     request: UpdateCharacterRequest
   ): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke('updateCharacter', request),
+  saveProject: (
+    payload: Omit<ProjectFile, 'version' | 'savedAt'>
+  ): Promise<SaveProjectResponse> => ipcRenderer.invoke('saveProject', payload),
+  openProject: (): Promise<OpenProjectResponse> => ipcRenderer.invoke('openProject'),
   onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
       callback(payload)

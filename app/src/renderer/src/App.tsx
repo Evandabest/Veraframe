@@ -207,6 +207,91 @@ function App(): React.JSX.Element {
     }
   }
 
+  // --- Project save / open ---
+  // A project file (.veraframe JSON) snapshots editor state. Saving a project
+  // does NOT bundle the rendered MP4 (that's separate via Save Video). Opening
+  // a project restores the controls; if a timeline is in the file we trigger
+  // a direct-mode re-render so the video editor comes back populated.
+  const [projectPath, setProjectPath] = useState<string | null>(null)
+  const [projectNote, setProjectNote] = useState<string | null>(null)
+
+  const onSaveProject = async (): Promise<void> => {
+    setProjectNote(null)
+    const currentTimeline =
+      state.status === 'success' ? state.timeline : null
+    const response = await window.veraframe.saveProject({
+      selectedScene: selectedSceneId,
+      selectedCharacters: selectedCharacterIds,
+      prompt,
+      mode,
+      provider,
+      model,
+      timeline: currentTimeline
+    })
+    if (response.ok) {
+      setProjectPath(response.path)
+      setProjectNote(`Saved to ${response.path}`)
+    } else if (response.error !== 'save canceled') {
+      setProjectNote(`Save failed: ${response.error}`)
+    }
+  }
+
+  const onOpenProject = async (): Promise<void> => {
+    setProjectNote(null)
+    const response = await window.veraframe.openProject()
+    if (!response.ok) {
+      if (response.error !== 'open canceled') {
+        setProjectNote(`Open failed: ${response.error}`)
+      }
+      return
+    }
+    const p = response.project
+    setProjectPath(response.path)
+    setMode(p.mode)
+    setPrompt(p.prompt)
+    setProvider(p.provider as LLMProvider)
+    setModel(p.model)
+    setSelectedSceneId(p.selectedScene)
+    setSelectedCharacterIds(p.selectedCharacters)
+    if (p.timeline) {
+      // Re-render the stored timeline so the user gets back the video editor
+      // populated. This is a direct-mode render — no LLM, no mock fixture.
+      const startedAt = Date.now()
+      setState({ status: 'running', startedAt })
+      const renderResp = await window.veraframe.render({
+        mode: 'direct',
+        timeline: p.timeline
+      })
+      const elapsedMs = Date.now() - startedAt
+      if (renderResp.ok) {
+        setState({
+          status: 'success',
+          renderId: renderResp.renderId,
+          videoUrl: renderResp.videoUrl,
+          durationSec: renderResp.durationSec,
+          timeline: renderResp.timeline,
+          elapsedMs
+        })
+      } else {
+        setState({ status: 'error', message: renderResp.error, elapsedMs })
+        setProjectNote(`Loaded project but re-render failed: ${renderResp.error}`)
+      }
+    } else {
+      setState({ status: 'idle' })
+      setProjectNote(`Loaded project (no saved timeline — click Render to materialize).`)
+    }
+  }
+
+  const onNewProject = (): void => {
+    if (!window.confirm('Discard the current project state and start fresh?')) return
+    setProjectPath(null)
+    setProjectNote(null)
+    setPrompt('')
+    setMode('mock')
+    setState({ status: 'idle' })
+    // Selections stay — they're driven by the registry which doesn't change.
+  }
+
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
     const startedAt = Date.now()
@@ -438,11 +523,49 @@ function App(): React.JSX.Element {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 p-8">
-        <header>
-          <h1 className="text-3xl font-bold tracking-tight">Veraframe</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Natural-language animation compiler for Blender
-          </p>
+        <header className="flex items-end justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Veraframe</h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              Natural-language animation compiler for Blender
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onNewProject}
+                disabled={isRunning}
+                className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+              >
+                New
+              </button>
+              <button
+                type="button"
+                onClick={onOpenProject}
+                disabled={isRunning}
+                className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+              >
+                Open Project…
+              </button>
+              <button
+                type="button"
+                onClick={onSaveProject}
+                disabled={isRunning}
+                className="rounded-md border border-emerald-500/60 bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
+              >
+                Save Project…
+              </button>
+            </div>
+            {projectPath && (
+              <p className="text-[11px] text-neutral-500" title={projectPath}>
+                {projectPath.replace(/^.*[\\/]/, '')}
+              </p>
+            )}
+            {projectNote && (
+              <p className="text-[11px] text-neutral-500 break-all">{projectNote}</p>
+            )}
+          </div>
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start">
