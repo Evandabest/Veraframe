@@ -1,0 +1,48 @@
+{
+  "project": "classroom_animation",
+  "scene": "classroom",
+  "characters": [
+    { "id": "student_01", "preset": "student_v1", "spawn": "door" },
+    { "id": "robot_01", "preset": "robot_v1", "spawn": "teacher_desk" }
+  ],
+  "shots": [
+    {
+      "id": "shot_001",
+      "start": 0,
+      "end": 8,
+      "camera": "wide",
+      "actions": [
+        {
+          "id": "act_001",
+          "start": 0,
+          "end": 4,
+          "character": "student_01",
+          "target": "center_room",
+          "type": "walk_to"
+        },
+        {
+          "id": "act_002",
+          "start": 4,
+          "end": 8,
+          "character": "student_01",
+          "type": "idle"
+        },
+        {
+          "id": "act_003",
+          "start": 1,
+          "end": 5,
+          "character": "robot_01",
+          "target": "student_desk",
+          "type": "walk_to"
+        },
+        {
+          "id": "act_004",
+          "start": 5,
+          "end": 8,
+          "character": "robot_01",
+          "type": "idle"
+        }
+      ]
+    }
+  ]
+}

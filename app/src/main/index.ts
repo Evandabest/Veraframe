@@ -1,11 +1,13 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, dialog } from 'electron'
-import { copyFile, open, stat } from 'fs/promises'
-import { join } from 'path'
+import { copyFile, open, readFile, stat } from 'fs/promises'
+import { randomUUID } from 'crypto'
+import { join, resolve as resolvePath } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { startDaemon, type DaemonHandle } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
-import { buildMockTimeline } from './mock'
+// buildMockTimeline removed — mock mode now loads a pre-rendered fixture
+// from assets/fixtures/ instead of building + rendering a canned timeline.
 import { runTimeline, type RenderResult } from './render'
 import { runPlanner, runEnhance, runActionGen, resolveRepoRoot } from './planner'
 
@@ -200,16 +202,50 @@ app.whenReady().then(async () => {
       event.sender.send('render-status', { step, detail })
     }
     try {
-      let timeline: Record<string, unknown>
+      // Mock mode short-circuits the entire render pipeline: it loads a
+      // pre-rendered MP4 + matching timeline from assets/fixtures/ and
+      // returns immediately. Lets the user test the editor (and incremental
+      // edits, which still render slices in Blender) without paying the
+      // ~60s full-render cost on every page load.
       if (request.mode === 'mock') {
-        sendProgress('build_mock_timeline')
-        timeline = buildMockTimeline(assets, request.durationSec ?? 8)
-      } else if (request.mode === 'direct') {
+        sendProgress('load_fixture')
+        try {
+          const fixtureVideo = resolvePath(assets.assetsDir, 'fixtures', 'mock-classroom.mp4')
+          const fixtureJson = resolvePath(assets.assetsDir, 'fixtures', 'mock-classroom.json')
+          const timelineText = await readFile(fixtureJson, 'utf8')
+          const fixtureTimeline = JSON.parse(timelineText) as Record<string, unknown>
+          const shotsArr = (fixtureTimeline.shots as Array<Record<string, unknown>>) ?? []
+          const fixtureDurationSec = Math.max(0, ...shotsArr.map((s) => Number(s.end ?? 0)))
+
+          const renderId = randomUUID()
+          renderedVideos.set(renderId, fixtureVideo)
+          return {
+            ok: true,
+            renderId,
+            videoUrl: `veraframe-render://${renderId}/video.mp4`,
+            durationSec: fixtureDurationSec,
+            executed: shotsArr.reduce(
+              (n, s) => n + ((s.actions as unknown[] | undefined)?.length ?? 0),
+              0
+            ),
+            skipped: 0,
+            timeline: fixtureTimeline
+          }
+        } catch (err) {
+          return {
+            ok: false,
+            error: `mock fixture load failed: ${(err as Error).message}`
+          }
+        }
+      }
+
+      let timeline: Record<string, unknown>
+      if (request.mode === 'direct') {
         if (!request.timeline) {
           return { ok: false, error: 'direct mode requires a timeline' }
         }
         timeline = request.timeline
-      } else {
+      } else if (request.mode === 'llm') {
         if (!request.prompt || !request.prompt.trim()) {
           return { ok: false, error: 'LLM mode requires a prompt' }
         }
@@ -219,6 +255,8 @@ app.whenReady().then(async () => {
           model: request.model,
           ollamaHost: request.ollamaHost
         })
+      } else {
+        return { ok: false, error: `unsupported mode: ${request.mode}` }
       }
       let incrementalConfig: import('./render').IncrementalRender | undefined
       if (request.incremental) {
@@ -264,7 +302,8 @@ app.whenReady().then(async () => {
         character: string
         actionId: string
         start: number
-        end: number
+        /** Optional; omit to let the LLM pick a duration. */
+        end?: number
         timelineContext: Record<string, unknown>
         provider?: LLMProvider
         model?: string
