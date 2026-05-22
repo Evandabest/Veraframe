@@ -33,6 +33,7 @@ interface RenderSuccess {
   durationSec: number
   executed: number
   skipped: number
+  timeline: Record<string, unknown>
 }
 
 interface RenderFailure {
@@ -147,7 +148,8 @@ app.whenReady().then(async () => {
         videoUrl: `veraframe-render://${result.renderId}/video.mp4`,
         durationSec: result.durationSec,
         executed: result.executed,
-        skipped: result.skipped
+        skipped: result.skipped,
+        timeline: result.timeline
       }
     } catch (err) {
       return { ok: false, error: (err as Error).message }

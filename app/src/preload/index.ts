@@ -15,6 +15,7 @@ export type RenderResponse =
       durationSec: number
       executed: number
       skipped: number
+      timeline: Record<string, unknown>
     }
   | { ok: false; error: string }
 

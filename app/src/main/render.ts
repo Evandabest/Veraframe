@@ -14,6 +14,7 @@ export interface RenderResult {
   durationSec: number
   executed: number
   skipped: number
+  timeline: Record<string, unknown>
 }
 
 /**
@@ -82,6 +83,7 @@ export async function runTimeline(
     videoPath: outputPath,
     durationSec,
     executed: execResult.executed.length,
-    skipped: execResult.skipped.length
+    skipped: execResult.skipped.length,
+    timeline
   }
 }
