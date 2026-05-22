@@ -21,6 +21,12 @@ const renderedVideos = new Map<string, string>()
 
 export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 
+export interface IncrementalRenderRequest {
+  previousRenderId: string
+  changedWindow: { start: number; end: number }
+  operation: 'splice' | 'append'
+}
+
 export interface RenderRequest {
   mode: 'mock' | 'llm' | 'direct'
   prompt?: string
@@ -30,6 +36,8 @@ export interface RenderRequest {
   ollamaHost?: string
   /** Required when mode='direct'; an already-resolved timeline JSON. */
   timeline?: Record<string, unknown>
+  /** Optional incremental config; only valid with mode='direct'. */
+  incremental?: IncrementalRenderRequest
 }
 
 interface RenderSuccess {
@@ -212,8 +220,24 @@ app.whenReady().then(async () => {
           ollamaHost: request.ollamaHost
         })
       }
+      let incrementalConfig: import('./render').IncrementalRender | undefined
+      if (request.incremental) {
+        const prevPath = renderedVideos.get(request.incremental.previousRenderId)
+        if (!prevPath) {
+          return {
+            ok: false,
+            error: `previousRenderId not found: ${request.incremental.previousRenderId}`
+          }
+        }
+        incrementalConfig = {
+          previousVideoPath: prevPath,
+          changedWindow: request.incremental.changedWindow,
+          operation: request.incremental.operation
+        }
+      }
       const result: RenderResult = await runTimeline(daemonHandle, assets, timeline, {
-        onProgress: ({ step, detail }) => sendProgress(step, detail)
+        onProgress: ({ step, detail }) => sendProgress(step, detail),
+        incremental: incrementalConfig
       })
       renderedVideos.set(result.renderId, result.videoPath)
       return {

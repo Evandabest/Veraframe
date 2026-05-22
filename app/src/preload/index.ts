@@ -3,6 +3,12 @@ import { electronAPI } from '@electron-toolkit/preload'
 
 export type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 
+export interface IncrementalRenderRequest {
+  previousRenderId: string
+  changedWindow: { start: number; end: number }
+  operation: 'splice' | 'append'
+}
+
 export interface RenderRequest {
   mode: 'mock' | 'llm' | 'direct'
   prompt?: string
@@ -15,6 +21,9 @@ export interface RenderRequest {
   ollamaHost?: string
   /** Required when mode='direct'; an already-resolved timeline JSON. */
   timeline?: Record<string, unknown>
+  /** When set, render only the changed window and ffmpeg-splice/append into
+   *  the prior video. Only valid with mode='direct'. */
+  incremental?: IncrementalRenderRequest
 }
 
 export type RenderResponse =
