@@ -57,13 +57,28 @@ You will output a JSON object that conforms exactly to the provided schema. Do n
 # Output rules
 
 - Choose exactly one scene from the available scenes list.
-- Declare every character you reference up front in the project's `characters` array. Each character's `spawn` must be one of the chosen scene's spawn points.
-- Inside actions, the `target` and `look_at` fields must refer either to one of the chosen scene's spawn points or to another declared character's `id`.
-- `camera`, `from_camera`, and `to_camera` must each be one of the chosen scene's camera presets.
-- `preset` in `set_lighting` must be one of the chosen scene's lighting presets.
+- Declare every character you reference up front in the project's `characters` array.
+- **Each entry in `characters` has three required fields and they are different things:**
+  - `id`: a short free-text handle YOU invent (e.g. `"student"`, `"robot"`, `"alice"`). Actions reference this handle. Do NOT reuse a preset id, scene id, or camera name here.
+  - `preset`: must be exactly one of the ids in the "Available characters" list above (e.g. `"student_v1"`, `"robot_v1"`). This is the model/rig that gets loaded.
+  - `spawn`: must be exactly one of the chosen scene's spawn points.
+- Inside actions, the `character` field, plus `target` and `look_at` when they point at another character, must use the handle from `id`, NOT the preset name.
+- `camera`, `from_camera`, and `to_camera` must each be one of the chosen scene's camera presets — these are scene cameras, not character presets.
+- `preset` in `set_lighting` must be one of the chosen scene's lighting presets — distinct from character presets and camera presets.
 - All times are absolute seconds. Every action's `end` must be greater than its `start`. Action timestamps must fit within the parent shot's window.
 - Use only action types from the available actions list. Respect each action's required and optional parameters.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
+
+# Worked example of the characters block
+
+```json
+"characters": [
+  {{"id": "student", "preset": "student_v1", "spawn": "door"}},
+  {{"id": "robot",   "preset": "robot_v1",   "spawn": "teacher_desk"}}
+]
+```
+
+Then actions reference the handle: `{{"character": "student", ...}}`, not `{{"character": "student_v1", ...}}`.
 """
 
 
