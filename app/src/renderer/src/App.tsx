@@ -364,7 +364,7 @@ function App(): React.JSX.Element {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <div className="mx-auto flex max-w-4xl flex-col gap-6 p-8">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 p-8">
         <header>
           <h1 className="text-3xl font-bold tracking-tight">Veraframe</h1>
           <p className="mt-1 text-sm text-neutral-400">
@@ -372,6 +372,7 @@ function App(): React.JSX.Element {
           </p>
         </header>
 
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start">
         <section className="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm">
@@ -623,6 +624,7 @@ function App(): React.JSX.Element {
             </>
           )}
         </section>
+        </div>
       </div>
 
       <ActionEditor
