@@ -26,6 +26,8 @@ from actions import point_at as point_at_action
 from actions import set_lighting as set_lighting_action
 from actions import shake_head as shake_head_action
 from actions import sit as sit_action
+from actions import track_subject as track_subject_action
+from actions import two_shot as two_shot_action
 from actions import wave as wave_action
 from actions import smile as smile_action
 from actions import stand as stand_action
@@ -89,59 +91,36 @@ def execute_timeline(
     # plays the loop strip during its window.
     timeline = _fill_pose_gaps_with_idle(timeline)
 
-    for shot in timeline.get("shots", []):
-        for action in shot.get("actions", []):
-            atype = action.get("type")
-            action_id = action.get("id", "?")
+    # Two-pass dispatch. We run all character/body actions first, then camera
+    # and scene actions. Camera primitives like `track_subject` and
+    # `two_shot` need to sample character positions at specific frames, so
+    # the walk_to keyframes must already be in place by the time they
+    # execute. set_lighting is also in pass-2 to keep it adjacent to camera
+    # work (no functional requirement).
+    camera_types = {"camera_cut", "camera_dolly", "track_subject", "two_shot", "set_lighting"}
 
-            if atype == "idle":
-                _dispatch_idle(action, characters, _resolve, fps, executed, skipped)
-                continue
-
-            if atype == "walk_to":
-                _dispatch_walk_to(action, characters, _resolve, fps, executed, skipped)
-                continue
-
-            if atype == "look_at":
-                _dispatch_look_at(action, characters, fps, executed, skipped)
-                continue
-
-            if atype == "turn_to":
-                _dispatch_turn_to(action, characters, fps, executed, skipped)
-                continue
-
-            if atype == "point_at":
-                _dispatch_point_at(action, characters, fps, executed, skipped)
-                continue
-
-            if atype in ("sit", "stand"):
-                _dispatch_pose(action, characters, fps, executed, skipped)
-                continue
-
-            if atype == "talk":
-                _dispatch_talk(action, characters, fps, executed, skipped)
-                continue
-
-            if atype in ("smile", "frown", "blink"):
-                _dispatch_emotion(action, characters, fps, executed, skipped)
-                continue
-
-            if atype in ("nod", "shake_head", "wave"):
-                _dispatch_gesture(action, characters, fps, executed, skipped)
-                continue
-
-            if atype == "camera_cut":
-                _dispatch_camera_cut(action, fps, executed, skipped)
-                continue
-
-            if atype == "camera_dolly":
-                _dispatch_camera_dolly(action, fps, executed, skipped)
-                continue
-
-            if atype == "set_lighting":
-                _dispatch_set_lighting(action, fps, executed, skipped)
-                continue
-
+    def _dispatch_body(action: dict) -> None:
+        atype = action.get("type")
+        action_id = action.get("id", "?")
+        if atype == "idle":
+            _dispatch_idle(action, characters, _resolve, fps, executed, skipped)
+        elif atype == "walk_to":
+            _dispatch_walk_to(action, characters, _resolve, fps, executed, skipped)
+        elif atype == "look_at":
+            _dispatch_look_at(action, characters, fps, executed, skipped)
+        elif atype == "turn_to":
+            _dispatch_turn_to(action, characters, fps, executed, skipped)
+        elif atype == "point_at":
+            _dispatch_point_at(action, characters, fps, executed, skipped)
+        elif atype in ("sit", "stand"):
+            _dispatch_pose(action, characters, fps, executed, skipped)
+        elif atype == "talk":
+            _dispatch_talk(action, characters, fps, executed, skipped)
+        elif atype in ("smile", "frown", "blink"):
+            _dispatch_emotion(action, characters, fps, executed, skipped)
+        elif atype in ("nod", "shake_head", "wave"):
+            _dispatch_gesture(action, characters, fps, executed, skipped)
+        else:
             skipped.append(
                 {
                     "id": action_id,
@@ -149,6 +128,38 @@ def execute_timeline(
                     "reason": f"action type '{atype}' not yet implemented",
                 }
             )
+
+    def _dispatch_camera(action: dict) -> None:
+        atype = action.get("type")
+        action_id = action.get("id", "?")
+        if atype == "camera_cut":
+            _dispatch_camera_cut(action, fps, executed, skipped)
+        elif atype == "camera_dolly":
+            _dispatch_camera_dolly(action, fps, executed, skipped)
+        elif atype == "track_subject":
+            _dispatch_track_subject(action, characters, fps, executed, skipped)
+        elif atype == "two_shot":
+            _dispatch_two_shot(action, characters, fps, executed, skipped)
+        elif atype == "set_lighting":
+            _dispatch_set_lighting(action, fps, executed, skipped)
+        else:
+            skipped.append(
+                {
+                    "id": action_id,
+                    "type": atype,
+                    "reason": f"camera action '{atype}' not yet implemented",
+                }
+            )
+
+    for shot in timeline.get("shots", []):
+        # Pass 1 — body / character actions (keyframes character armatures).
+        for action in shot.get("actions", []):
+            if action.get("type") not in camera_types:
+                _dispatch_body(action)
+        # Pass 2 — camera + scene actions (can sample character locations).
+        for action in shot.get("actions", []):
+            if action.get("type") in camera_types:
+                _dispatch_camera(action)
 
     return {"executed": executed, "skipped": skipped, "fps": fps}
 
@@ -739,6 +750,71 @@ def _dispatch_gesture(
         return
 
     executed.append({"id": action_id, "type": atype, **result})
+
+
+def _dispatch_track_subject(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "track_subject",
+                "reason": f"character '{char_id}' not loaded",
+            }
+        )
+        return
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = track_subject_action.execute(
+            armature, start_frame, end_frame, action_id=action_id
+        )
+    except track_subject_action.TrackSubjectError as e:
+        skipped.append({"id": action_id, "type": "track_subject", "reason": str(e)})
+        return
+    executed.append({"id": action_id, "type": "track_subject", **result})
+
+
+def _dispatch_two_shot(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    a_id = action.get("a")
+    b_id = action.get("b")
+    a_armature = characters.get(a_id)
+    b_armature = characters.get(b_id)
+    if a_armature is None or b_armature is None:
+        missing = [name for name, arm in [(a_id, a_armature), (b_id, b_armature)] if arm is None]
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "two_shot",
+                "reason": f"character(s) not loaded: {missing}",
+            }
+        )
+        return
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = two_shot_action.execute(
+            a_armature, b_armature, start_frame, end_frame, action_id=action_id
+        )
+    except two_shot_action.TwoShotError as e:
+        skipped.append({"id": action_id, "type": "two_shot", "reason": str(e)})
+        return
+    executed.append({"id": action_id, "type": "two_shot", **result})
 
 
 def _dispatch_camera_dolly(

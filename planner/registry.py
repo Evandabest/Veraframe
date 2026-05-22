@@ -302,6 +302,36 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
         ),
     ),
     ActionSpec(
+        name="track_subject",
+        description=(
+            "Active camera follows a character. The camera is offset behind-and-"
+            "above the character and tracks their motion through the action "
+            "window. Use this when a character is walking and you want the "
+            "camera to follow rather than cutting between fixed presets."
+        ),
+        params=(
+            ParamSpec(
+                name="character",
+                description="ID of the character handle to follow.",
+            ),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
+        name="two_shot",
+        description=(
+            "Active camera repositions to frame TWO characters together (classic "
+            "dialogue framing). Camera sits perpendicular to the line between "
+            "them, distance scales with their separation so both fit in frame. "
+            "Static for the action's duration."
+        ),
+        params=(
+            ParamSpec(name="a", description="First character handle."),
+            ParamSpec(name="b", description="Second character handle."),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
         name="set_lighting",
         description="Switch the scene's lighting to a named preset.",
         params=(

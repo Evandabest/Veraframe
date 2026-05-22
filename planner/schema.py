@@ -62,6 +62,8 @@ class ActionType(StrEnum):
     WAVE = "wave"
     CAMERA_CUT = "camera_cut"
     CAMERA_DOLLY = "camera_dolly"
+    TRACK_SUBJECT = "track_subject"
+    TWO_SHOT = "two_shot"
     SET_LIGHTING = "set_lighting"
 
 
@@ -179,6 +181,30 @@ class CameraDollyAction(_TimedBase):
     to_camera: str = Field(min_length=1)
 
 
+class TrackSubjectAction(_TimedBase):
+    """Active camera follows a character handle for the action's duration.
+
+    The camera's position is animated from a behind-and-above offset relative
+    to the character at start_frame to the same offset at end_frame. If the
+    character walks during the window, the camera tracks them.
+    """
+
+    type: Literal["track_subject"] = "track_subject"
+    character: str = Field(min_length=1)
+
+
+class TwoShotAction(_TimedBase):
+    """Active camera repositions to frame both `a` and `b` for the duration.
+
+    Camera is placed perpendicular to the line A↔B, looking at the midpoint,
+    at a distance proportional to their separation so both fit in frame.
+    """
+
+    type: Literal["two_shot"] = "two_shot"
+    a: str = Field(min_length=1)
+    b: str = Field(min_length=1)
+
+
 class SetLightingAction(_TimedBase):
     type: Literal["set_lighting"] = "set_lighting"
     preset: str = Field(min_length=1)
@@ -201,6 +227,8 @@ Action = Annotated[
     | WaveAction
     | CameraCutAction
     | CameraDollyAction
+    | TrackSubjectAction
+    | TwoShotAction
     | SetLightingAction,
     Field(discriminator="type"),
 ]

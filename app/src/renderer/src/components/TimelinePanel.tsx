@@ -97,6 +97,8 @@ const ACTION_COLORS: Record<string, [string, string]> = {
   wave: ['bg-teal-500/40', 'border-teal-400'],
   camera_cut: ['bg-cyan-600/70', 'border-cyan-400'],
   camera_dolly: ['bg-cyan-500/60', 'border-cyan-400'],
+  track_subject: ['bg-cyan-500/40', 'border-cyan-400'],
+  two_shot: ['bg-sky-600/70', 'border-sky-400'],
   set_lighting: ['bg-yellow-600/70', 'border-yellow-400']
 }
 const DEFAULT_COLORS: [string, string] = ['bg-neutral-700/70', 'border-neutral-500']
