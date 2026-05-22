@@ -265,7 +265,8 @@ function App(): React.JSX.Element {
       setState({ status: 'running', startedAt })
       const renderResp = await window.veraframe.render({
         mode: 'direct',
-        timeline: p.timeline
+        timeline: p.timeline,
+        quality
       })
       const elapsedMs = Date.now() - startedAt
       if (renderResp.ok) {
@@ -309,7 +310,8 @@ function App(): React.JSX.Element {
       ollamaHost: undefined,
       selectedScene: mode === 'llm' ? selectedSceneId ?? undefined : undefined,
       selectedCharacters:
-        mode === 'llm' && selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined
+        mode === 'llm' && selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
+      quality
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -500,7 +502,8 @@ function App(): React.JSX.Element {
     const response = await window.veraframe.render({
       mode: 'direct',
       timeline: tl as unknown as Record<string, unknown>,
-      incremental
+      incremental,
+      quality
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -568,7 +571,8 @@ function App(): React.JSX.Element {
     const response = await window.veraframe.render({
       mode: 'direct',
       timeline: tl as unknown as Record<string, unknown>,
-      incremental
+      incremental,
+      quality
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -629,7 +633,8 @@ function App(): React.JSX.Element {
     setState({ status: 'running', startedAt })
     const response = await window.veraframe.render({
       mode: 'direct',
-      timeline: tl as unknown as Record<string, unknown>
+      timeline: tl as unknown as Record<string, unknown>,
+      quality
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
