@@ -278,10 +278,10 @@ function App(): React.JSX.Element {
 
   const onAcceptAction = async (): Promise<void> => {
     if (!editor || !pendingAction || state.status !== 'success') return
+    const previousRenderId = state.renderId
+    const previousDurationSec = state.durationSec
     const tl = JSON.parse(JSON.stringify(state.timeline)) as MutableTimeline
-    // Splice the new action in: replace the original if there was one,
-    // otherwise append it to the first shot's actions (the timeline is
-    // single-shot in the MVP).
+
     const targetShot = tl.shots[0]
     if (!targetShot) {
       setActionError('Timeline has no shot to append to.')
@@ -294,20 +294,37 @@ function App(): React.JSX.Element {
     } else {
       targetShot.actions = [...targetShot.actions, pendingAction]
     }
-    // If the new action extends past the current shot end, grow the shot so
-    // the render pipeline (which derives durationSec from max shot.end) emits
-    // a longer MP4. This is how the timeline "extends".
+    // Grow the shot if the new action extends past the current end so the
+    // render pipeline derives a larger durationSec.
     if (pendingAction.end > targetShot.end) {
       targetShot.end = pendingAction.end
     }
     closeEditor()
 
-    // Kick off the re-render with the mutated timeline (mode='direct').
+    // Pick the incremental strategy:
+    // - Adding new content past the previous video's end → append the tail.
+    // - Editing inside the existing video (or filling an inner gap)
+    //   → splice the changed window into the previous video.
+    const isExtension =
+      !editor.original && pendingAction.start >= previousDurationSec - 0.05
+    const incremental = isExtension
+      ? {
+          previousRenderId,
+          changedWindow: { start: previousDurationSec, end: pendingAction.end },
+          operation: 'append' as const
+        }
+      : {
+          previousRenderId,
+          changedWindow: { start: pendingAction.start, end: pendingAction.end },
+          operation: 'splice' as const
+        }
+
     const startedAt = Date.now()
     setState({ status: 'running', startedAt })
     const response = await window.veraframe.render({
       mode: 'direct',
-      timeline: tl as unknown as Record<string, unknown>
+      timeline: tl as unknown as Record<string, unknown>,
+      incremental
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
