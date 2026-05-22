@@ -108,7 +108,6 @@ function App(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider])
   const [state, setState] = useState<RenderState>({ status: 'idle' })
-  const [currentTime, setCurrentTime] = useState(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -123,7 +122,6 @@ function App(): React.JSX.Element {
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
     setState({ status: 'running' })
-    setCurrentTime(0)
     const response = await window.veraframe.render({
       mode,
       prompt: mode === 'llm' ? prompt : undefined,
@@ -389,12 +387,11 @@ function App(): React.JSX.Element {
                 controls
                 autoPlay
                 loop
-                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 className="w-full rounded-md border border-neutral-800"
               />
               <TimelinePanel
                 timeline={state.timeline}
-                currentTimeSec={currentTime}
+                videoRef={videoRef}
                 durationSec={state.durationSec}
                 onSeek={onSeek}
               />

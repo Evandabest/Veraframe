@@ -1,15 +1,21 @@
 /**
  * Read-only timeline viewer with click + drag scrubbing.
  *
- * Layout: a two-column flex row. Left column holds aligned lane labels;
- * right column holds the ruler, each lane row, and a full-area pointer
- * overlay that captures scrub gestures. Action blocks and tick labels use
- * `pointer-events-none` so they never swallow events.
+ * The red playhead is driven by `requestAnimationFrame` reading the video
+ * element's `currentTime` directly — NOT by React state. The HTML5
+ * `timeupdate` event fires only ~4-15Hz, so a state-driven playhead lurches
+ * in visible chunks. The rAF loop pushes a transform onto the playhead's DOM
+ * node at the display refresh rate (typically 60fps).
  *
- * The red playhead is driven by `currentTimeSec`.
+ * During a scrub gesture (`isScrubbingRef.current === true`), the playhead
+ * follows the pointer's last known X directly instead of waiting for the
+ * video to seek — that way it never lags the cursor by a frame or two.
+ *
+ * Action blocks and tick labels use `pointer-events-none` so the full-area
+ * scrub overlay above them always receives clicks and drags.
  */
 
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
 
 interface TimelineAction {
   id: string
@@ -41,7 +47,7 @@ interface Timeline {
 
 interface TimelinePanelProps {
   timeline: Record<string, unknown>
-  currentTimeSec: number
+  videoRef: RefObject<HTMLVideoElement | null>
   durationSec: number
   onSeek?: (timeSec: number) => void
 }
@@ -73,7 +79,7 @@ function asTimeline(raw: Record<string, unknown>): Timeline {
 
 export function TimelinePanel({
   timeline,
-  currentTimeSec,
+  videoRef,
   durationSec,
   onSeek
 }: TimelinePanelProps): React.JSX.Element {
@@ -98,7 +104,39 @@ export function TimelinePanel({
   const ticks = Array.from({ length: seconds + 1 }, (_, i) => i)
 
   const scrubRef = useRef<HTMLDivElement | null>(null)
-  const [isScrubbing, setIsScrubbing] = useState(false)
+  const playheadRef = useRef<HTMLDivElement | null>(null)
+  const isScrubbingRef = useRef(false)
+  const lastPointerXRef = useRef(0)
+  const [scrubbingCursor, setScrubbingCursor] = useState(false)
+
+  // 60fps playhead loop. Reads video.currentTime each frame and pushes a
+  // `transform: translateX(...)` onto the playhead's DOM node. Uses transform
+  // instead of `left` so the browser composites it without layout — even
+  // smoother on weaker machines. While scrubbing, the playhead follows the
+  // pointer's last known position instead of waiting for the video to seek.
+  useEffect(() => {
+    let rafId = 0
+    const tick = (): void => {
+      const playhead = playheadRef.current
+      const scrub = scrubRef.current
+      if (playhead && scrub && durationSec > 0) {
+        const rect = scrub.getBoundingClientRect()
+        let pct: number
+        if (isScrubbingRef.current) {
+          pct = (lastPointerXRef.current - rect.left) / rect.width
+        } else {
+          const video = videoRef.current
+          pct = video ? video.currentTime / durationSec : 0
+        }
+        const clamped = Math.max(0, Math.min(1, pct))
+        // translate3d for GPU compositing
+        playhead.style.transform = `translate3d(${clamped * rect.width}px, 0, 0)`
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [durationSec, videoRef])
 
   const seekFromClientX = (clientX: number): void => {
     if (!onSeek || !scrubRef.current || durationSec <= 0) return
@@ -110,12 +148,15 @@ export function TimelinePanel({
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setIsScrubbing(true)
+    isScrubbingRef.current = true
+    lastPointerXRef.current = event.clientX
+    setScrubbingCursor(true)
     seekFromClientX(event.clientX)
   }
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (!isScrubbing) return
+    if (!isScrubbingRef.current) return
+    lastPointerXRef.current = event.clientX
     seekFromClientX(event.clientX)
   }
 
@@ -123,10 +164,9 @@ export function TimelinePanel({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    setIsScrubbing(false)
+    isScrubbingRef.current = false
+    setScrubbingCursor(false)
   }
-
-  const playheadPct = durationSec > 0 ? (currentTimeSec / durationSec) * 100 : 0
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-neutral-900 p-3">
@@ -155,9 +195,9 @@ export function TimelinePanel({
         {/* Right: ruler + lane rows + scrub overlay + playhead */}
         <div className="relative flex-1">
           <div className="flex flex-col gap-1">
-            {/* Ruler — tick line and label are separate elements so the label
-              for the rightmost tick can sit FLUSH-LEFT of its line (with a
-              translateX(-100%)) instead of overflowing the container. */}
+            {/* Ruler — line and label are separate so the rightmost label
+                can sit flush-LEFT of its tick line via translateX(-100%)
+                instead of overflowing the container. */}
             <div className="pointer-events-none relative h-5 overflow-hidden border-b border-neutral-800">
               {ticks.map((t) => {
                 const leftPct = (t / durationSec) * 100
@@ -213,23 +253,25 @@ export function TimelinePanel({
           </div>
 
           {/* Scrub overlay — full area of the right column. Sits ABOVE the
-              lanes (z-10) so the pointer-events-none action blocks never
-              swallow gestures. */}
+              lanes (z-10) so action blocks (pointer-events-none) never steal
+              gestures. */}
           <div
             ref={scrubRef}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={stopScrubbing}
             onPointerCancel={stopScrubbing}
-            className={`absolute inset-0 z-10 ${isScrubbing ? 'cursor-grabbing' : 'cursor-pointer'}`}
+            className={`absolute inset-0 z-10 ${scrubbingCursor ? 'cursor-grabbing' : 'cursor-pointer'}`}
             style={{ touchAction: 'none' }}
           />
 
-          {/* Playhead — above lanes but pointer-events-none so the overlay
-              still receives gestures right under it. */}
+          {/* Playhead — pointer-events-none so the scrub overlay below still
+              receives gestures. Position is driven by the rAF loop above via
+              direct DOM mutation (transform), bypassing React renders. */}
           <div
-            className="pointer-events-none absolute inset-y-0 z-20 w-px bg-red-400"
-            style={{ left: `${playheadPct}%` }}
+            ref={playheadRef}
+            className="pointer-events-none absolute inset-y-0 left-0 z-20 w-px bg-red-400"
+            style={{ willChange: 'transform' }}
           />
         </div>
       </div>
