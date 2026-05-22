@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, dialog } from 'electron'
-import { copyFile, open, readFile, stat } from 'fs/promises'
+import { copyFile, mkdir, open, readFile, stat, writeFile } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { join, resolve as resolvePath } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -40,6 +40,10 @@ export interface RenderRequest {
   timeline?: Record<string, unknown>
   /** Optional incremental config; only valid with mode='direct'. */
   incremental?: IncrementalRenderRequest
+  /** Hard constraint: LLM mode only. Forces the scene id. */
+  selectedScene?: string
+  /** Hard constraint: LLM mode only. Limits the character pool. */
+  selectedCharacters?: string[]
 }
 
 interface RenderSuccess {
@@ -174,14 +178,22 @@ app.whenReady().then(async () => {
     })
   })
 
-  // Load asset registry — used to build mock timelines and resolve fbx paths.
-  try {
-    assets = loadAssets(resolveAssetsDir())
+  // Load asset registry. We merge the repo-bundled assets with a user-data
+  // directory so users can upload their own scenes/characters and have them
+  // persist across runs without modifying the repo.
+  const userAssetsDir = resolvePath(app.getPath('userData'), 'assets')
+  const reloadAssets = (): AssetRegistry => {
+    const next = loadAssets(resolveAssetsDir(), userAssetsDir)
     console.log(
-      `Assets loaded: ${Object.keys(assets.scenes).length} scene(s), ` +
-        `${Object.keys(assets.characters).length} character(s), ` +
-        `${Object.keys(assets.animations).length} animation(s)`
+      `Assets loaded: ${Object.keys(next.scenes).length} scene(s), ` +
+        `${Object.keys(next.characters).length} character(s), ` +
+        `${Object.keys(next.animations).length} animation(s) ` +
+        `(user dir: ${userAssetsDir})`
     )
+    return next
+  }
+  try {
+    assets = reloadAssets()
   } catch (err) {
     console.error('Asset load failed:', err)
   }
@@ -253,7 +265,9 @@ app.whenReady().then(async () => {
         timeline = await runPlanner(request.prompt, resolveRepoRoot(), assets.assetsDir, {
           provider: request.provider,
           model: request.model,
-          ollamaHost: request.ollamaHost
+          ollamaHost: request.ollamaHost,
+          selectedScene: request.selectedScene,
+          selectedCharacters: request.selectedCharacters
         })
       } else {
         return { ok: false, error: `unsupported mode: ${request.mode}` }
@@ -327,6 +341,144 @@ app.whenReady().then(async () => {
           { provider: request.provider, model: request.model }
         )
         return { ok: true, action }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  // -------------------------------------------------------------------------
+  // Registry IPC: list, rescan, and upload scenes/characters.
+  // -------------------------------------------------------------------------
+
+  const registrySummary = (
+    reg: AssetRegistry | null
+  ): {
+    scenes: Array<{ id: string; displayName: string; spawnPoints: string[]; cameraPresets: string[]; userProvided: boolean }>
+    characters: Array<{ id: string; displayName: string; userProvided: boolean }>
+  } => {
+    if (!reg) return { scenes: [], characters: [] }
+    const userDir = reg.userAssetsDir
+    return {
+      scenes: Object.values(reg.scenes).map((s) => ({
+        id: s.id,
+        displayName: s.displayName,
+        spawnPoints: s.spawnPoints,
+        cameraPresets: s.cameraPresets,
+        userProvided: Boolean(userDir && s.blendPath.startsWith(userDir))
+      })),
+      characters: Object.values(reg.characters).map((c) => ({
+        id: c.id,
+        displayName: c.displayName,
+        userProvided: Boolean(userDir && c.meshPath.startsWith(userDir))
+      }))
+    }
+  }
+
+  ipcMain.handle('getRegistry', async () => registrySummary(assets))
+
+  ipcMain.handle('rescanRegistry', async () => {
+    try {
+      assets = reloadAssets()
+      return { ok: true, registry: registrySummary(assets) }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle(
+    'pickAssetFile',
+    async (
+      _event,
+      kind: 'scene' | 'character'
+    ): Promise<{ ok: true; filePath: string } | { ok: false; error: string }> => {
+      const result = await dialog.showOpenDialog({
+        title: kind === 'scene' ? 'Pick a .blend scene file' : 'Pick a .fbx character file',
+        properties: ['openFile'],
+        filters:
+          kind === 'scene'
+            ? [{ name: 'Blender scene', extensions: ['blend'] }]
+            : [{ name: 'FBX', extensions: ['fbx'] }]
+      })
+      if (result.canceled || !result.filePaths[0]) {
+        return { ok: false, error: 'picker canceled' }
+      }
+      return { ok: true, filePath: result.filePaths[0] }
+    }
+  )
+
+  ipcMain.handle(
+    'addScene',
+    async (
+      _event,
+      payload: {
+        sourcePath: string
+        id: string
+        displayName: string
+        description?: string
+        spawnPoints: string[]
+        cameraPresets: string[]
+        lightingPresets?: string[]
+      }
+    ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
+      if (!/^[a-z0-9_]+$/i.test(payload.id)) {
+        return { ok: false, error: "id must be alphanumeric / underscore only" }
+      }
+      const sceneDir = resolvePath(userAssetsDir, 'scenes', payload.id)
+      try {
+        await mkdir(sceneDir, { recursive: true })
+        const blendDest = resolvePath(sceneDir, 'scene.blend')
+        await copyFile(payload.sourcePath, blendDest)
+        const manifest = {
+          id: payload.id,
+          display_name: payload.displayName,
+          description: payload.description ?? '',
+          blend_file: 'scene.blend',
+          spawn_points: payload.spawnPoints,
+          camera_presets: payload.cameraPresets,
+          lighting_presets: payload.lightingPresets ?? ['default']
+        }
+        await writeFile(
+          resolvePath(sceneDir, 'scene.json'),
+          JSON.stringify(manifest, null, 2),
+          'utf8'
+        )
+        assets = reloadAssets()
+        return { ok: true, id: payload.id }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'addCharacter',
+    async (
+      _event,
+      payload: { sourcePath: string; id: string; displayName: string; description?: string }
+    ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
+      if (!/^[a-z0-9_]+$/i.test(payload.id)) {
+        return { ok: false, error: "id must be alphanumeric / underscore only" }
+      }
+      const charDir = resolvePath(userAssetsDir, 'characters', payload.id)
+      try {
+        await mkdir(charDir, { recursive: true })
+        const fbxDest = resolvePath(charDir, 'character.fbx')
+        await copyFile(payload.sourcePath, fbxDest)
+        const manifest = {
+          id: payload.id,
+          display_name: payload.displayName,
+          description: payload.description ?? '',
+          mesh_file: 'character.fbx',
+          rig_type: 'mixamo'
+        }
+        await writeFile(
+          resolvePath(charDir, 'character.json'),
+          JSON.stringify(manifest, null, 2),
+          'utf8'
+        )
+        assets = reloadAssets()
+        return { ok: true, id: payload.id }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }

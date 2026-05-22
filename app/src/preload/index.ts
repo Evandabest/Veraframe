@@ -24,7 +24,52 @@ export interface RenderRequest {
   /** When set, render only the changed window and ffmpeg-splice/append into
    *  the prior video. Only valid with mode='direct'. */
   incremental?: IncrementalRenderRequest
+  /** Hard-constrain LLM to this scene id. */
+  selectedScene?: string
+  /** Hard-constrain LLM character pool to these preset ids. */
+  selectedCharacters?: string[]
 }
+
+export interface RegistrySceneSummary {
+  id: string
+  displayName: string
+  spawnPoints: string[]
+  cameraPresets: string[]
+  userProvided: boolean
+}
+
+export interface RegistryCharacterSummary {
+  id: string
+  displayName: string
+  userProvided: boolean
+}
+
+export interface RegistrySummary {
+  scenes: RegistrySceneSummary[]
+  characters: RegistryCharacterSummary[]
+}
+
+export interface AddSceneRequest {
+  sourcePath: string
+  id: string
+  displayName: string
+  description?: string
+  spawnPoints: string[]
+  cameraPresets: string[]
+  lightingPresets?: string[]
+}
+
+export interface AddCharacterRequest {
+  sourcePath: string
+  id: string
+  displayName: string
+  description?: string
+}
+
+export type AddAssetResponse = { ok: true; id: string } | { ok: false; error: string }
+export type PickAssetFileResponse =
+  | { ok: true; filePath: string }
+  | { ok: false; error: string }
 
 export type RenderResponse =
   | {
@@ -89,6 +134,16 @@ const veraframe = {
     ipcRenderer.invoke('enhancePrompt', request),
   generateAction: (request: GenerateActionRequest): Promise<GenerateActionResponse> =>
     ipcRenderer.invoke('generateAction', request),
+  getRegistry: (): Promise<RegistrySummary> => ipcRenderer.invoke('getRegistry'),
+  rescanRegistry: (): Promise<
+    { ok: true; registry: RegistrySummary } | { ok: false; error: string }
+  > => ipcRenderer.invoke('rescanRegistry'),
+  pickAssetFile: (kind: 'scene' | 'character'): Promise<PickAssetFileResponse> =>
+    ipcRenderer.invoke('pickAssetFile', kind),
+  addScene: (request: AddSceneRequest): Promise<AddAssetResponse> =>
+    ipcRenderer.invoke('addScene', request),
+  addCharacter: (request: AddCharacterRequest): Promise<AddAssetResponse> =>
+    ipcRenderer.invoke('addCharacter', request),
   onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
       callback(payload)

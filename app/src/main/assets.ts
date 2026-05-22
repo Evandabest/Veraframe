@@ -23,47 +23,67 @@ export interface AnimationManifest {
 }
 
 export interface AssetRegistry {
+  /** Primary (repo-bundled) assets directory. */
   assetsDir: string
+  /** User-data directory where uploaded assets are stored. May be empty. */
+  userAssetsDir?: string
   scenes: Record<string, SceneManifest>
   characters: Record<string, CharacterManifest>
   animations: Record<string, AnimationManifest>
 }
 
 /**
- * Load all scene/character/animation manifests under `assetsDir`.
+ * Load all scene/character/animation manifests, merging the repo-bundled
+ * `assetsDir` with an optional `userAssetsDir` (typically Electron's
+ * `app.getPath('userData')/assets`). User-provided entries override
+ * repo entries when their `id` collides.
  *
  * Mirrors `planner/registry.py` for the parts main needs to drive the daemon:
  * scene blend path, character mesh fbx, and animation fbx paths.
  */
-export function loadAssets(assetsDir: string): AssetRegistry {
-  return {
-    assetsDir,
-    scenes: loadGroup<SceneManifest>(resolvePath(assetsDir, 'scenes'), 'scene.json', (raw, dir) => ({
+export function loadAssets(assetsDir: string, userAssetsDir?: string): AssetRegistry {
+  const scanScenes = (dir: string): Record<string, SceneManifest> =>
+    loadGroup<SceneManifest>(resolvePath(dir, 'scenes'), 'scene.json', (raw, d) => ({
       id: String(raw.id),
       displayName: String(raw.display_name ?? raw.id),
-      blendPath: resolvePath(dir, String(raw.blend_file)),
+      blendPath: resolvePath(d, String(raw.blend_file)),
       spawnPoints: (raw.spawn_points ?? []) as string[],
       cameraPresets: (raw.camera_presets ?? []) as string[]
-    })),
-    characters: loadGroup<CharacterManifest>(
-      resolvePath(assetsDir, 'characters'),
+    }))
+  const scanCharacters = (dir: string): Record<string, CharacterManifest> =>
+    loadGroup<CharacterManifest>(
+      resolvePath(dir, 'characters'),
       'character.json',
-      (raw, dir) => ({
+      (raw, d) => ({
         id: String(raw.id),
         displayName: String(raw.display_name ?? raw.id),
-        meshPath: resolvePath(dir, String(raw.mesh_file)),
+        meshPath: resolvePath(d, String(raw.mesh_file)),
         rigType: String(raw.rig_type ?? 'mixamo')
       })
-    ),
-    animations: loadGroup<AnimationManifest>(
-      resolvePath(assetsDir, 'animations'),
+    )
+  const scanAnimations = (dir: string): Record<string, AnimationManifest> =>
+    loadGroup<AnimationManifest>(
+      resolvePath(dir, 'animations'),
       'animation.json',
-      (raw, dir) => ({
+      (raw, d) => ({
         id: String(raw.id),
         displayName: String(raw.display_name ?? raw.id),
-        fbxPath: resolvePath(dir, String(raw.fbx_file))
+        fbxPath: resolvePath(d, String(raw.fbx_file))
       })
     )
+
+  return {
+    assetsDir,
+    userAssetsDir,
+    scenes: { ...scanScenes(assetsDir), ...(userAssetsDir ? scanScenes(userAssetsDir) : {}) },
+    characters: {
+      ...scanCharacters(assetsDir),
+      ...(userAssetsDir ? scanCharacters(userAssetsDir) : {})
+    },
+    animations: {
+      ...scanAnimations(assetsDir),
+      ...(userAssetsDir ? scanAnimations(userAssetsDir) : {})
+    }
   }
 }
 

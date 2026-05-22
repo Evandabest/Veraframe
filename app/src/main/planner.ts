@@ -16,6 +16,10 @@ export interface PlannerOptions {
   model?: string
   /** Ollama API base; sets OLLAMA_API_BASE so LiteLLM hits the right host. */
   ollamaHost?: string
+  /** Hard constraint: lock the LLM to this scene id. Passed as --selected-scene. */
+  selectedScene?: string
+  /** Hard constraint: limit the LLM to these character preset ids. */
+  selectedCharacters?: string[]
 }
 
 /**
@@ -32,13 +36,21 @@ export function runPlanner(
   assetsDir: string,
   options: PlannerOptions = {}
 ): Promise<Record<string, unknown>> {
+  const extraArgs: string[] = []
+  if (options.selectedScene) {
+    extraArgs.push('--selected-scene', options.selectedScene)
+  }
+  if (options.selectedCharacters && options.selectedCharacters.length > 0) {
+    extraArgs.push('--selected-characters', options.selectedCharacters.join(','))
+  }
   return runPythonEntry<Record<string, unknown>>(
     'planner.run_planner',
     prompt,
     repoRoot,
     assetsDir,
     options,
-    (stdout) => JSON.parse(stdout) as Record<string, unknown>
+    (stdout) => JSON.parse(stdout) as Record<string, unknown>,
+    extraArgs
   )
 }
 
