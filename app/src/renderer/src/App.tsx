@@ -19,15 +19,16 @@ const PROVIDER_LABEL: Record<LLMProvider, string> = {
 
 type RenderState =
   | { status: 'idle' }
-  | { status: 'running' }
+  | { status: 'running'; startedAt: number }
   | {
       status: 'success'
       renderId: string
       videoUrl: string
       durationSec: number
       timeline: Record<string, unknown>
+      elapsedMs: number
     }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; elapsedMs: number }
 
 function App(): React.JSX.Element {
   const [mode, setMode] = useState<'mock' | 'llm'>('mock')
@@ -121,7 +122,8 @@ function App(): React.JSX.Element {
 
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
-    setState({ status: 'running' })
+    const startedAt = Date.now()
+    setState({ status: 'running', startedAt })
     const response = await window.veraframe.render({
       mode,
       prompt: mode === 'llm' ? prompt : undefined,
@@ -129,18 +131,34 @@ function App(): React.JSX.Element {
       model: mode === 'llm' ? model.trim() || undefined : undefined,
       ollamaHost: undefined
     })
+    const elapsedMs = Date.now() - startedAt
     if (response.ok) {
       setState({
         status: 'success',
         renderId: response.renderId,
         videoUrl: response.videoUrl,
         durationSec: response.durationSec,
-        timeline: response.timeline
+        timeline: response.timeline,
+        elapsedMs
       })
     } else {
-      setState({ status: 'error', message: response.error })
+      setState({ status: 'error', message: response.error, elapsedMs })
     }
   }
+
+  // Live tick (1Hz) while a render is in progress so the elapsed counter
+  // updates. Stops as soon as the render leaves the running state.
+  const [renderTick, setRenderTick] = useState(0)
+  useEffect(() => {
+    if (state.status !== 'running') return
+    const id = setInterval(() => setRenderTick((n) => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [state.status])
+  const liveElapsedSec =
+    state.status === 'running' ? Math.floor((Date.now() - state.startedAt) / 1000) : 0
+  // Reference renderTick so the dependency is "used" — re-renders are what
+  // drives the visible counter forward.
+  void renderTick
 
   const [saveNote, setSaveNote] = useState<string | null>(null)
   const onSave = async (renderId: string): Promise<void> => {
@@ -354,13 +372,21 @@ function App(): React.JSX.Element {
             <p className="text-sm text-neutral-500">No render yet.</p>
           )}
           {state.status === 'running' && (
-            <p className="text-sm text-neutral-400">
-              Rendering — this can take a minute or two on the first call (Blender startup).
-            </p>
+            <div className="flex items-baseline gap-3">
+              <p className="text-sm text-neutral-400">
+                Rendering — this can take a minute or two on the first call (Blender startup).
+              </p>
+              <span className="font-mono text-sm tabular-nums text-neutral-300">
+                {formatElapsed(liveElapsedSec)}
+              </span>
+            </div>
           )}
           {state.status === 'error' && (
             <p className="text-sm text-red-400">
-              <span className="font-semibold">Render failed:</span> {state.message}
+              <span className="font-semibold">Render failed:</span> {state.message}{' '}
+              <span className="text-neutral-500">
+                (after {formatElapsed(Math.floor(state.elapsedMs / 1000))})
+              </span>
             </p>
           )}
           {state.status === 'success' && (
@@ -368,6 +394,9 @@ function App(): React.JSX.Element {
               <div className="flex items-center justify-between">
                 <p className="text-sm text-neutral-400">
                   Rendered {state.durationSec.toFixed(1)}s
+                  <span className="ml-2 text-neutral-500">
+                    in {formatElapsed(Math.floor(state.elapsedMs / 1000))}
+                  </span>
                 </p>
                 <button
                   type="button"
@@ -401,6 +430,12 @@ function App(): React.JSX.Element {
       </div>
     </div>
   )
+}
+
+function formatElapsed(totalSec: number): string {
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return m > 0 ? `${m}m ${s.toString().padStart(2, '0')}s` : `${s}s`
 }
 
 function providerKeyEnv(provider: LLMProvider): string {
