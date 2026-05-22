@@ -1,5 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { TimelinePanel } from './components/TimelinePanel'
+import { TimelinePanel, type PendingActionEdit } from './components/TimelinePanel'
+import { ActionEditor } from './components/ActionEditor'
+
+interface TimelineAction {
+  id: string
+  type: string
+  character?: string
+  start: number
+  end: number
+  [key: string]: unknown
+}
+
+interface MutableTimeline {
+  scene: string
+  characters: Array<{ id: string; preset: string; spawn: string }>
+  shots: Array<{ id: string; start: number; end: number; camera: string; actions: TimelineAction[] }>
+  [key: string]: unknown
+}
 
 type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 
@@ -189,6 +206,134 @@ function App(): React.JSX.Element {
       videoRef.current.currentTime = timeSec
     }
   }
+
+  // --- Per-block edit / add flow ---
+  // The flow has two stages. Stage 1: user clicks a block (or "+") and
+  // types a prompt; we call the LLM and surface the proposed Action. Stage
+  // 2: user accepts or rejects. Accept replaces the timeline locally and
+  // kicks off a render with mode='direct' (no LLM, just executor + render).
+  interface EditorTarget {
+    laneId: string
+    startSec: number
+    endSec: number
+    original: TimelineAction | null
+  }
+  const [editor, setEditor] = useState<EditorTarget | null>(null)
+  const [pendingAction, setPendingAction] = useState<TimelineAction | null>(null)
+  const [generatingAction, setGeneratingAction] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const closeEditor = (): void => {
+    setEditor(null)
+    setPendingAction(null)
+    setActionError(null)
+    setGeneratingAction(false)
+  }
+
+  const onEditAction = (action: TimelineAction, laneId: string): void => {
+    setEditor({
+      laneId,
+      startSec: action.start,
+      endSec: action.end,
+      original: action
+    })
+    setPendingAction(null)
+    setActionError(null)
+  }
+
+  const onAddAction = (laneId: string, startSec: number): void => {
+    if (state.status !== 'success') return
+    const remaining = state.durationSec - startSec
+    const endSec = Math.min(state.durationSec, startSec + Math.max(2, Math.min(remaining, 2)))
+    setEditor({ laneId, startSec, endSec, original: null })
+    setPendingAction(null)
+    setActionError(null)
+  }
+
+  const onGenerateAction = async (promptText: string): Promise<void> => {
+    if (!editor || state.status !== 'success') return
+    setGeneratingAction(true)
+    setActionError(null)
+    const tl = state.timeline as unknown as MutableTimeline
+    const targetId = editor.original?.id ?? `act_${Date.now().toString(36)}`
+    const response = await window.veraframe.generateAction({
+      prompt: promptText,
+      scene: tl.scene,
+      character: editor.laneId,
+      actionId: targetId,
+      start: editor.startSec,
+      end: editor.endSec,
+      timelineContext: state.timeline,
+      provider,
+      model: model.trim() || undefined
+    })
+    setGeneratingAction(false)
+    if (response.ok) {
+      setPendingAction(response.action as TimelineAction)
+    } else {
+      setActionError(response.error)
+    }
+  }
+
+  const onAcceptAction = async (): Promise<void> => {
+    if (!editor || !pendingAction || state.status !== 'success') return
+    const tl = JSON.parse(JSON.stringify(state.timeline)) as MutableTimeline
+    // Splice the new action in: replace the original if there was one,
+    // otherwise append it to the first shot's actions (the timeline is
+    // single-shot in the MVP).
+    const targetShot = tl.shots[0]
+    if (!targetShot) {
+      setActionError('Timeline has no shot to append to.')
+      return
+    }
+    if (editor.original) {
+      targetShot.actions = targetShot.actions.map((a) =>
+        a.id === editor.original!.id ? pendingAction : a
+      )
+    } else {
+      targetShot.actions = [...targetShot.actions, pendingAction]
+    }
+    closeEditor()
+
+    // Kick off the re-render with the mutated timeline (mode='direct').
+    const startedAt = Date.now()
+    setState({ status: 'running', startedAt })
+    const response = await window.veraframe.render({
+      mode: 'direct',
+      timeline: tl as unknown as Record<string, unknown>
+    })
+    const elapsedMs = Date.now() - startedAt
+    if (response.ok) {
+      setState({
+        status: 'success',
+        renderId: response.renderId,
+        videoUrl: response.videoUrl,
+        durationSec: response.durationSec,
+        timeline: response.timeline,
+        elapsedMs
+      })
+    } else {
+      setState({ status: 'error', message: response.error, elapsedMs })
+    }
+  }
+
+  const onRejectAction = (): void => {
+    setPendingAction(null)
+    setActionError(null)
+  }
+
+  const onAddCharacterStub = (): void => {
+    alert('Adding a new character is coming soon — for now declare them in the original prompt.')
+  }
+
+  const pendingEditForPanel: PendingActionEdit | null =
+    editor && pendingAction
+      ? {
+          originalActionId: editor.original?.id ?? null,
+          newAction: pendingAction,
+          laneId: editor.laneId
+        }
+      : null
 
   const isRunning = state.status === 'running'
   const disabledSubmit = isRunning || (mode === 'llm' && !prompt.trim())
@@ -446,11 +591,30 @@ function App(): React.JSX.Element {
                 videoRef={videoRef}
                 durationSec={state.durationSec}
                 onSeek={onSeek}
+                onEditAction={onEditAction}
+                onAddAction={onAddAction}
+                onAddCharacter={onAddCharacterStub}
+                pendingEdit={pendingEditForPanel}
               />
             </>
           )}
         </section>
       </div>
+
+      <ActionEditor
+        open={editor !== null}
+        original={editor?.original ?? null}
+        laneId={editor?.laneId ?? ''}
+        startSec={editor?.startSec ?? 0}
+        endSec={editor?.endSec ?? 0}
+        pendingAction={pendingAction}
+        generating={generatingAction}
+        error={actionError}
+        onGenerate={onGenerateAction}
+        onAccept={onAcceptAction}
+        onReject={onRejectAction}
+        onClose={closeEditor}
+      />
     </div>
   )
 }
