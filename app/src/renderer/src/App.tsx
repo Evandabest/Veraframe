@@ -34,10 +34,31 @@ function App(): React.JSX.Element {
   const [prompt, setPrompt] = useState('')
   const [provider, setProvider] = useState<LLMProvider>('openai')
   const [model, setModel] = useState<string>(PROVIDER_DEFAULT_MODEL.openai)
-  const [ollamaHost, setOllamaHost] = useState<string>('http://localhost:11434')
+  // Hardcoded localhost; advanced users can set OLLAMA_API_BASE in their shell.
+  const ollamaHost = 'http://localhost:11434'
   const [ollamaModels, setOllamaModels] = useState<string[] | null>(null)
   const [ollamaError, setOllamaError] = useState<string | null>(null)
   const [ollamaLoading, setOllamaLoading] = useState(false)
+  const [enhancing, setEnhancing] = useState(false)
+  const [enhanceError, setEnhanceError] = useState<string | null>(null)
+
+  const onEnhance = async (): Promise<void> => {
+    if (!prompt.trim()) return
+    setEnhanceError(null)
+    setEnhancing(true)
+    const response = await window.veraframe.enhancePrompt({
+      prompt,
+      provider,
+      model: model.trim() || undefined,
+      ollamaHost: undefined
+    })
+    setEnhancing(false)
+    if (response.ok) {
+      setPrompt(response.prompt)
+    } else {
+      setEnhanceError(response.error)
+    }
+  }
 
   const refreshOllamaModels = async (): Promise<void> => {
     setOllamaLoading(true)
@@ -57,7 +78,7 @@ function App(): React.JSX.Element {
     }
   }
 
-  // Auto-fetch when the user selects Ollama or changes the host.
+  // Auto-fetch when the user selects Ollama.
   useEffect(() => {
     if (provider === 'ollama') {
       refreshOllamaModels()
@@ -66,7 +87,7 @@ function App(): React.JSX.Element {
       setOllamaError(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider, ollamaHost])
+  }, [provider])
   const [state, setState] = useState<RenderState>({ status: 'idle' })
   const [currentTime, setCurrentTime] = useState(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -89,7 +110,7 @@ function App(): React.JSX.Element {
       prompt: mode === 'llm' ? prompt : undefined,
       provider: mode === 'llm' ? provider : undefined,
       model: mode === 'llm' ? model.trim() || undefined : undefined,
-      ollamaHost: mode === 'llm' && provider === 'ollama' ? ollamaHost.trim() || undefined : undefined
+      ollamaHost: undefined
     })
     if (response.ok) {
       setState({
@@ -160,17 +181,33 @@ function App(): React.JSX.Element {
             </label>
           </div>
 
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={mode !== 'llm' || isRunning}
-            placeholder={
-              mode === 'llm'
-                ? 'Describe a scene, e.g. "the student walks to the center of the lab and smiles"'
-                : 'Mock mode renders a canned timeline; no prompt needed.'
-            }
-            className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
-          />
+          <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              disabled={mode !== 'llm' || isRunning}
+              placeholder={
+                mode === 'llm'
+                  ? 'Describe a scene, e.g. "the student walks to the center of the lab and smiles"'
+                  : 'Mock mode renders a canned timeline; no prompt needed.'
+              }
+              className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 pr-24 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            />
+            {mode === 'llm' && (
+              <button
+                type="button"
+                onClick={onEnhance}
+                disabled={enhancing || isRunning || !prompt.trim()}
+                title="Rewrite your prompt using the actual scene/character/spawn names"
+                className="absolute right-2 top-2 rounded-md border border-purple-500/60 bg-purple-600/30 px-2 py-1 text-xs font-medium text-purple-200 hover:bg-purple-600/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {enhancing ? 'Enhancing…' : '✨ Enhance'}
+              </button>
+            )}
+          </div>
+          {enhanceError && (
+            <p className="text-xs text-red-400">Enhance failed: {enhanceError}</p>
+          )}
 
           {mode === 'llm' && (
             <div className="flex flex-col gap-2 border-t border-neutral-800 pt-3">
@@ -228,19 +265,6 @@ function App(): React.JSX.Element {
                   />
                 )}
 
-                {provider === 'ollama' && (
-                  <>
-                    <label className="text-xs text-neutral-400">Host</label>
-                    <input
-                      type="text"
-                      value={ollamaHost}
-                      onChange={(e) => setOllamaHost(e.target.value)}
-                      disabled={isRunning}
-                      placeholder="http://localhost:11434"
-                      className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 font-mono text-sm focus:border-neutral-500 focus:outline-none disabled:opacity-50"
-                    />
-                  </>
-                )}
               </div>
               {provider === 'ollama' && ollamaError && (
                 <p className="text-xs text-red-400">{ollamaError}</p>
