@@ -72,6 +72,13 @@ def execute_timeline(
     executed: list[dict] = []
     skipped: list[dict] = []
 
+    # Implicit idle fill — for each character + each shot, walk the existing
+    # body-pose actions sorted by start time and inject `idle` for any
+    # uncovered time. Without this, gaps render as Mixamo's T-pose, which is
+    # almost never what the user wants. Idle composes cleanly because it just
+    # plays the loop strip during its window.
+    timeline = _fill_pose_gaps_with_idle(timeline)
+
     for shot in timeline.get("shots", []):
         for action in shot.get("actions", []):
             atype = action.get("type")
@@ -130,6 +137,86 @@ def execute_timeline(
             )
 
     return {"executed": executed, "skipped": skipped, "fps": fps}
+
+
+# Action types that occupy the character's body (their pose). When two of
+# these overlap on the same character, the second one wins on the relevant
+# bones. Gaps between any of these → T-pose → looks broken → we fill with
+# idle. Face-only actions (smile/frown/blink/talk) don't count — they don't
+# cover the body and shouldn't trigger gap-fill.
+_POSE_ACTION_TYPES = frozenset({"idle", "walk_to", "turn_to", "sit", "stand"})
+
+
+def _fill_pose_gaps_with_idle(timeline: dict) -> dict:
+    """Return a copy of `timeline` with implicit idle actions covering every
+    character's uncovered time inside each shot.
+
+    The gap-fill preserves the original action ordering and ids; we only add
+    new entries with deterministic ids prefixed `_gap_idle_`. Operates on a
+    shallow copy of each shot's actions list so the input dict isn't mutated.
+    """
+    if not isinstance(timeline, dict):
+        return timeline
+    shots = timeline.get("shots", [])
+    if not isinstance(shots, list) or not shots:
+        return timeline
+
+    new_shots: list[dict] = []
+    for shot in shots:
+        if not isinstance(shot, dict):
+            new_shots.append(shot)
+            continue
+        shot_start = float(shot.get("start", 0))
+        shot_end = float(shot.get("end", 0))
+        actions = list(shot.get("actions", []))
+
+        # Collect every character handle that appears in this shot's pose
+        # actions — those are the candidates for gap-fill.
+        char_ids: set[str] = set()
+        for a in actions:
+            if a.get("type") in _POSE_ACTION_TYPES and a.get("character"):
+                char_ids.add(str(a["character"]))
+
+        injected: list[dict] = []
+        for char_id in sorted(char_ids):
+            char_pose_actions = sorted(
+                (a for a in actions
+                 if a.get("type") in _POSE_ACTION_TYPES and a.get("character") == char_id),
+                key=lambda a: float(a.get("start", 0)),
+            )
+            cursor = shot_start
+            for idx, a in enumerate(char_pose_actions):
+                a_start = float(a.get("start", 0))
+                a_end = float(a.get("end", 0))
+                if a_start > cursor + 0.01:
+                    injected.append(
+                        {
+                            "id": f"_gap_idle_{char_id}_{shot.get('id', 'shot')}_{idx}",
+                            "type": "idle",
+                            "character": char_id,
+                            "start": cursor,
+                            "end": a_start,
+                        }
+                    )
+                cursor = max(cursor, a_end)
+            if cursor < shot_end - 0.01:
+                injected.append(
+                    {
+                        "id": f"_gap_idle_{char_id}_{shot.get('id', 'shot')}_tail",
+                        "type": "idle",
+                        "character": char_id,
+                        "start": cursor,
+                        "end": shot_end,
+                    }
+                )
+
+        new_shot = dict(shot)
+        new_shot["actions"] = actions + injected
+        new_shots.append(new_shot)
+
+    out = dict(timeline)
+    out["shots"] = new_shots
+    return out
 
 
 def _dispatch_idle(
