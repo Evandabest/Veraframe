@@ -1,19 +1,29 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { TimelinePanel } from './components/TimelinePanel'
 
 type RenderState =
   | { status: 'idle' }
   | { status: 'running' }
-  | { status: 'success'; renderId: string; videoUrl: string; durationSec: number }
+  | {
+      status: 'success'
+      renderId: string
+      videoUrl: string
+      durationSec: number
+      timeline: Record<string, unknown>
+    }
   | { status: 'error'; message: string }
 
 function App(): React.JSX.Element {
   const [mode, setMode] = useState<'mock' | 'llm'>('mock')
   const [prompt, setPrompt] = useState('')
   const [state, setState] = useState<RenderState>({ status: 'idle' })
+  const [currentTime, setCurrentTime] = useState(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
     setState({ status: 'running' })
+    setCurrentTime(0)
     const response = await window.veraframe.render({
       mode,
       prompt: mode === 'llm' ? prompt : undefined
@@ -23,7 +33,8 @@ function App(): React.JSX.Element {
         status: 'success',
         renderId: response.renderId,
         videoUrl: response.videoUrl,
-        durationSec: response.durationSec
+        durationSec: response.durationSec,
+        timeline: response.timeline
       })
     } else {
       setState({ status: 'error', message: response.error })
@@ -41,12 +52,18 @@ function App(): React.JSX.Element {
     }
   }
 
+  const onSeek = (timeSec: number): void => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = timeSec
+    }
+  }
+
   const isRunning = state.status === 'running'
   const disabledSubmit = isRunning || (mode === 'llm' && !prompt.trim())
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6 p-8">
         <header>
           <h1 className="text-3xl font-bold tracking-tight">Veraframe</h1>
           <p className="mt-1 text-sm text-neutral-400">
@@ -134,12 +151,20 @@ function App(): React.JSX.Element {
                 <p className="text-xs text-neutral-500 break-all">{saveNote}</p>
               )}
               <video
+                ref={videoRef}
                 key={state.videoUrl}
                 src={state.videoUrl}
                 controls
                 autoPlay
                 loop
+                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                 className="w-full rounded-md border border-neutral-800"
+              />
+              <TimelinePanel
+                timeline={state.timeline}
+                currentTimeSec={currentTime}
+                durationSec={state.durationSec}
+                onSeek={onSeek}
               />
             </>
           )}
