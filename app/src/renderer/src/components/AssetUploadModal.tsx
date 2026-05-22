@@ -42,7 +42,9 @@ export function AssetUploadModal({
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  // Reset form + auto-open the OS file picker each time the modal opens.
+  // Reset form when the modal opens. We deliberately do NOT auto-open the OS
+  // file picker — the user needs to see the description first and decide
+  // whether to proceed. They click "Pick file…" to open Finder.
   useEffect(() => {
     if (!open) return
     setFilePath(null)
@@ -56,24 +58,22 @@ export function AssetUploadModal({
     setCameraPresets('wide')
     setSubmitting(false)
     setSubmitError(null)
-    ;(async () => {
-      const result = await window.veraframe.pickAssetFile(kind)
-      if (result.ok) {
-        setFilePath(result.filePath)
-        // Auto-fill an id and display name from the chosen filename.
-        const base = result.filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
-        const sanitized = base.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-        setId(sanitized)
-        setDisplayName(base)
-      } else if (result.error !== 'picker canceled') {
-        setPickerError(result.error)
-      } else {
-        // Canceled the picker → close the modal so the user isn't stuck.
-        onClose()
-      }
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, kind])
+
+  const pickMainFile = async (): Promise<void> => {
+    setPickerError(null)
+    const result = await window.veraframe.pickAssetFile(kind)
+    if (result.ok) {
+      setFilePath(result.filePath)
+      // Auto-fill an id and display name from the chosen filename.
+      const base = result.filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
+      const sanitized = base.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+      setId(sanitized)
+      setDisplayName(base)
+    } else if (result.error !== 'picker canceled') {
+      setPickerError(result.error)
+    }
+  }
 
   const pickAuxFile = async (
     setter: (p: string) => void
@@ -154,11 +154,16 @@ export function AssetUploadModal({
 
         {pickerError && <p className="text-xs text-red-400">{pickerError}</p>}
 
-        {filePath && (
-          <p className="break-all rounded-md border border-neutral-800 bg-neutral-950 p-2 text-xs text-neutral-400">
-            <span className="text-neutral-500">file:</span> {filePath}
-          </p>
-        )}
+        <FilePickerField
+          label={kind === 'scene' ? 'Scene file (.blend)' : 'Character mesh (.fbx)'}
+          hint={
+            kind === 'scene'
+              ? 'The .blend file containing the scene geometry, spawn-point Empties, and Camera objects.'
+              : 'The .fbx mesh with the Mixamo-style rig.'
+          }
+          value={filePath}
+          onPick={pickMainFile}
+        />
 
         {filePath && (
           <div className="flex flex-col gap-3">
@@ -251,6 +256,7 @@ export function AssetUploadModal({
             type="button"
             onClick={onSubmit}
             disabled={!canSubmit || submitting}
+            title={!filePath ? 'Pick a file first' : undefined}
             className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
           >
             {submitting ? 'Adding…' : 'Add'}
