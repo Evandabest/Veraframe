@@ -62,7 +62,6 @@ export function AssetUploadModal({
 
   const pickMainFile = async (): Promise<void> => {
     setPickerError(null)
-    // Characters use a folder picker; scenes still use a single file picker.
     if (kind === 'character') {
       const result = await window.veraframe.pickCharacterFolder()
       if (result.ok) {
@@ -85,13 +84,27 @@ export function AssetUploadModal({
       }
       return
     }
-    const result = await window.veraframe.pickAssetFile(kind)
+    // kind === 'scene' — folder picker that finds .blend/.fbx + optional scene.json.
+    const result = await window.veraframe.pickSceneFolder()
     if (result.ok) {
-      setFilePath(result.filePath)
-      const base = result.filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
-      const sanitized = base.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-      setId(sanitized)
-      setDisplayName(base)
+      setFilePath(result.sceneFile)
+      if (result.manifest?.id) setId(result.manifest.id)
+      else {
+        const base = result.folderPath.replace(/^.*[\\/]/, '')
+        const sanitized = base
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+        setId(sanitized)
+      }
+      setDisplayName(result.manifest?.displayName ?? result.folderPath.replace(/^.*[\\/]/, ''))
+      if (result.manifest?.description) setDescription(result.manifest.description)
+      if (result.manifest?.spawnPoints?.length) {
+        setSpawnPoints(result.manifest.spawnPoints.join(', '))
+      }
+      if (result.manifest?.cameraPresets?.length) {
+        setCameraPresets(result.manifest.cameraPresets.join(', '))
+      }
     } else if (result.error !== 'picker canceled') {
       setPickerError(result.error)
     }
@@ -169,7 +182,7 @@ export function AssetUploadModal({
           </h3>
           <p className="mt-1 text-xs text-neutral-400">
             {kind === 'scene'
-              ? 'Pick a .blend or .fbx scene; we’ll copy it to the user-data dir and write a manifest. The names you give for spawn points and cameras must match the Empty / Camera object names inside the scene file. Tip: rotate each spawn-point Empty in Blender to set the character’s starting facing — Empties left at the default (0,0,0) auto-rotate the character toward the active camera.'
+              ? 'Pick a FOLDER containing a scene.blend or scene.fbx (and optionally scene.json). Spawn-point Empties and Camera objects must already exist in the file with the names you give below. Tip: rotate each spawn-point Empty to set the character’s starting facing — Empties at (0,0,0) auto-rotate the character toward the active camera.'
               : 'Pick a FOLDER containing character.fbx (mesh + rig), idle.fbx, and walk_in_place.fbx (filenames can also include those words in a longer name). The body must use Mixamo-style bone names. VRM-style face shape keys (Joy, Sorrow, Blink, A/I/U/E/O visemes) are optional — missing them just makes smile/frown/blink/talk no-ops. If the folder contains a character.json, we pre-fill the metadata from it.'}
           </p>
         </header>
@@ -177,12 +190,10 @@ export function AssetUploadModal({
         {pickerError && <p className="text-xs text-red-400">{pickerError}</p>}
 
         <FilePickerField
-          label={
-            kind === 'scene' ? 'Scene file (.blend or .fbx)' : 'Character folder'
-          }
+          label={kind === 'scene' ? 'Scene folder' : 'Character folder'}
           hint={
             kind === 'scene'
-              ? 'Either a Blender .blend or an exported .fbx scene. Spawn-point Empties and Camera objects must already exist in the file with the names below.'
+              ? 'Folder with a scene.blend or scene.fbx (and optional scene.json).'
               : 'Folder with mesh + idle + walk FBX files (any filename containing "idle" or "walk" works).'
           }
           value={filePath}

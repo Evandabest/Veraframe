@@ -25,6 +25,7 @@ export interface AssetsPanelProps {
   onAddCharacter: () => void
   onRemoveScene: (id: string) => void
   onRemoveCharacter: (id: string) => void
+  onEditScene: (id: string) => void
   onEditCharacter: (id: string) => void
   onRefresh: () => void
   disabled?: boolean
@@ -41,6 +42,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
     onAddCharacter,
     onRemoveScene,
     onRemoveCharacter,
+    onEditScene,
     onEditCharacter,
     onRefresh,
     disabled = false
@@ -67,6 +69,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
         onSelectScene={onSelectScene}
         onAddScene={onAddScene}
         onRemoveScene={onRemoveScene}
+        onEditScene={onEditScene}
         disabled={disabled}
       />
 
@@ -89,6 +92,7 @@ interface SceneRowProps {
   onSelectScene: (id: string) => void
   onAddScene: () => void
   onRemoveScene: (id: string) => void
+  onEditScene: (id: string) => void
   disabled: boolean
 }
 
@@ -98,10 +102,11 @@ function SceneRow({
   onSelectScene,
   onAddScene,
   onRemoveScene,
+  onEditScene,
   disabled
 }: SceneRowProps): React.JSX.Element {
   const selectedScene = scenes.find((s) => s.id === selectedSceneId) ?? null
-  const canRemoveSelected = Boolean(selectedScene && selectedScene.userProvided)
+  const canMutateSelected = Boolean(selectedScene && selectedScene.userProvided)
 
   return (
     <div className="flex flex-col gap-1">
@@ -167,16 +172,27 @@ function SceneRow({
         >
           + Add
         </button>
-        {canRemoveSelected && selectedScene && (
-          <button
-            type="button"
-            onClick={() => onRemoveScene(selectedScene.id)}
-            disabled={disabled}
-            title={`Remove ${selectedScene.displayName}`}
-            className="rounded-md border border-red-500/60 bg-red-500/10 px-2 py-1 text-xs text-red-200 hover:bg-red-500/25 disabled:opacity-50"
-          >
-            ×
-          </button>
+        {canMutateSelected && selectedScene && (
+          <>
+            <button
+              type="button"
+              onClick={() => onEditScene(selectedScene.id)}
+              disabled={disabled}
+              title={`Edit ${selectedScene.displayName}`}
+              className="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemoveScene(selectedScene.id)}
+              disabled={disabled}
+              title={`Remove ${selectedScene.displayName}`}
+              className="rounded-md border border-red-500/60 bg-red-500/10 px-2 py-1 text-xs text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+            >
+              ×
+            </button>
+          </>
         )}
       </div>
       {selectedScene && (

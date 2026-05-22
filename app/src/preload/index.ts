@@ -100,6 +100,7 @@ export type OpenProjectResponse =
 export type PickCharacterFolderResponse =
   | {
       ok: true
+      kind: 'character'
       folderPath: string
       mesh: string
       idle: string
@@ -107,6 +108,32 @@ export type PickCharacterFolderResponse =
       manifest: { id?: string; displayName?: string; description?: string } | null
     }
   | { ok: false; error: string }
+
+export type PickSceneFolderResponse =
+  | {
+      ok: true
+      kind: 'scene'
+      folderPath: string
+      sceneFile: string
+      manifest: {
+        id?: string
+        displayName?: string
+        description?: string
+        spawnPoints?: string[]
+        cameraPresets?: string[]
+        lightingPresets?: string[]
+      } | null
+    }
+  | { ok: false; error: string }
+
+export interface UpdateSceneRequest {
+  id: string
+  scenePath?: string | null
+  displayName?: string | null
+  description?: string | null
+  spawnPoints?: string[] | null
+  cameraPresets?: string[] | null
+}
 
 export type AddAssetResponse = { ok: true; id: string } | { ok: false; error: string }
 export type PickAssetFileResponse =
@@ -192,10 +219,16 @@ const veraframe = {
     ipcRenderer.invoke('removeCharacter', id),
   pickCharacterFolder: (): Promise<PickCharacterFolderResponse> =>
     ipcRenderer.invoke('pickAssetFolder', 'character'),
+  pickSceneFolder: (): Promise<PickSceneFolderResponse> =>
+    ipcRenderer.invoke('pickAssetFolder', 'scene'),
   updateCharacter: (
     request: UpdateCharacterRequest
   ): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke('updateCharacter', request),
+  updateScene: (
+    request: UpdateSceneRequest
+  ): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('updateScene', request),
   saveProject: (
     payload: Omit<ProjectFile, 'version' | 'savedAt'>
   ): Promise<SaveProjectResponse> => ipcRenderer.invoke('saveProject', payload),

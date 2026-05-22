@@ -4,6 +4,8 @@ import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
+import { EditSceneModal } from './components/EditSceneModal'
+import { AddCharacterModal } from './components/AddCharacterModal'
 import type { RegistrySummary } from '../../preload'
 
 interface TimelineAction {
@@ -63,6 +65,8 @@ function App(): React.JSX.Element {
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([])
   const [uploadKind, setUploadKind] = useState<AssetKind | null>(null)
   const [editCharacterId, setEditCharacterId] = useState<string | null>(null)
+  const [editSceneId, setEditSceneId] = useState<string | null>(null)
+  const [addCharacterOpen, setAddCharacterOpen] = useState(false)
 
   const applyRegistry = (next: RegistrySummary): void => {
     setRegistry(next)
@@ -504,8 +508,65 @@ function App(): React.JSX.Element {
     setActionError(null)
   }
 
-  const onAddCharacterStub = (): void => {
-    alert('Adding a new character is coming soon — for now declare them in the original prompt.')
+  // "+ Character" mid-edit. Adds a new character + a full-shot idle to the
+  // current timeline, then triggers a FULL re-render (a new character changes
+  // every frame, so incremental splice/append can't help us).
+  const openAddCharacter = (): void => {
+    if (state.status !== 'success') {
+      window.alert('Render a video first, then you can add a character to its timeline.')
+      return
+    }
+    setAddCharacterOpen(true)
+  }
+
+  const onConfirmAddCharacter = async (payload: {
+    preset: string
+    spawn: string
+    handle: string
+  }): Promise<void> => {
+    if (state.status !== 'success') return
+    setAddCharacterOpen(false)
+
+    const tl = JSON.parse(JSON.stringify(state.timeline)) as MutableTimeline
+    tl.characters = [
+      ...tl.characters,
+      { id: payload.handle, preset: payload.preset, spawn: payload.spawn }
+    ]
+    // Default behavior: cover the full shot with a single idle so the new
+    // character isn't stuck in T-pose. User can edit the timeline later.
+    const targetShot = tl.shots[0]
+    if (targetShot) {
+      targetShot.actions = [
+        ...targetShot.actions,
+        {
+          id: `act_${Date.now().toString(36)}`,
+          type: 'idle',
+          character: payload.handle,
+          start: targetShot.start,
+          end: targetShot.end
+        }
+      ]
+    }
+
+    const startedAt = Date.now()
+    setState({ status: 'running', startedAt })
+    const response = await window.veraframe.render({
+      mode: 'direct',
+      timeline: tl as unknown as Record<string, unknown>
+    })
+    const elapsedMs = Date.now() - startedAt
+    if (response.ok) {
+      setState({
+        status: 'success',
+        renderId: response.renderId,
+        videoUrl: response.videoUrl,
+        durationSec: response.durationSec,
+        timeline: response.timeline,
+        elapsedMs
+      })
+    } else {
+      setState({ status: 'error', message: response.error, elapsedMs })
+    }
   }
 
   const pendingEditForPanel: PendingActionEdit | null =
@@ -580,10 +641,14 @@ function App(): React.JSX.Element {
           onAddCharacter={() => setUploadKind('character')}
           onRemoveScene={onRemoveScene}
           onRemoveCharacter={onRemoveCharacter}
+          onEditScene={setEditSceneId}
           onEditCharacter={setEditCharacterId}
           onRefresh={refreshRegistry}
           disabled={isRunning}
         />
+
+        {/* AddCharacterModal lives down below; this is just a placeholder
+            comment to anchor the wiring change above. */}
         <section className="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm">
@@ -833,7 +898,7 @@ function App(): React.JSX.Element {
                 onSeek={onSeek}
                 onEditAction={onEditAction}
                 onAddAction={onAddAction}
-                onAddCharacter={onAddCharacterStub}
+                onAddCharacter={openAddCharacter}
                 pendingEdit={pendingEditForPanel}
               />
             </>
@@ -873,6 +938,49 @@ function App(): React.JSX.Element {
         onClose={() => setUploadKind(null)}
         onSubmitted={onUploadSubmitted}
       />
+
+      <AddCharacterModal
+        open={addCharacterOpen}
+        availableCharacters={registry.characters.filter((c) => {
+          // Don't offer presets that are already in the timeline. Multiple
+          // characters per preset are allowed in principle, but it muddles
+          // the LLM/editor; restrict here for clarity.
+          if (state.status !== 'success') return true
+          const tl = state.timeline as unknown as MutableTimeline
+          return !tl.characters.some((existing) => existing.preset === c.id)
+        })}
+        scene={
+          state.status === 'success'
+            ? registry.scenes.find((s) => s.id === (state.timeline as unknown as MutableTimeline).scene) ?? null
+            : null
+        }
+        existingHandles={
+          state.status === 'success'
+            ? (state.timeline as unknown as MutableTimeline).characters.map((c) => c.id)
+            : []
+        }
+        onClose={() => setAddCharacterOpen(false)}
+        onConfirm={onConfirmAddCharacter}
+      />
+
+      {editSceneId && (() => {
+        const sc = registry.scenes.find((s) => s.id === editSceneId)
+        if (!sc) return null
+        return (
+          <EditSceneModal
+            open
+            sceneId={sc.id}
+            initialDisplayName={sc.displayName}
+            initialSpawnPoints={sc.spawnPoints}
+            initialCameraPresets={sc.cameraPresets}
+            onClose={() => setEditSceneId(null)}
+            onSaved={async () => {
+              setEditSceneId(null)
+              await refreshRegistry()
+            }}
+          />
+        )
+      })()}
 
       {editCharacterId && (() => {
         const ch = registry.characters.find((c) => c.id === editCharacterId)

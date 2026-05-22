@@ -390,20 +390,38 @@ app.whenReady().then(async () => {
     'pickAssetFolder',
     async (
       _event,
-      kind: 'character'
+      kind: 'character' | 'scene'
     ): Promise<
       | {
           ok: true
+          kind: 'character'
           folderPath: string
           mesh: string
           idle: string
           walk: string
           manifest: { id?: string; displayName?: string; description?: string } | null
         }
+      | {
+          ok: true
+          kind: 'scene'
+          folderPath: string
+          sceneFile: string
+          manifest: {
+            id?: string
+            displayName?: string
+            description?: string
+            spawnPoints?: string[]
+            cameraPresets?: string[]
+            lightingPresets?: string[]
+          } | null
+        }
       | { ok: false; error: string }
     > => {
       const result = await dialog.showOpenDialog({
-        title: 'Pick a character folder (containing character.fbx, idle.fbx, walk_in_place.fbx)',
+        title:
+          kind === 'character'
+            ? 'Pick a character folder (character.fbx + idle.fbx + walk_in_place.fbx)'
+            : 'Pick a scene folder (scene.blend or scene.fbx + optional scene.json)',
         properties: ['openDirectory']
       })
       if (result.canceled || !result.filePaths[0]) {
@@ -412,33 +430,72 @@ app.whenReady().then(async () => {
       const folder = result.filePaths[0]
       try {
         const entries = (await readdir(folder)).filter((n) => !n.startsWith('.'))
-        const fbxFiles = entries.filter((n) => n.toLowerCase().endsWith('.fbx'))
-        const findBy = (predicate: (n: string) => boolean): string | null => {
-          const hit = fbxFiles.find((n) => predicate(n.toLowerCase()))
-          return hit ? resolvePath(folder, hit) : null
+        if (kind === 'character') {
+          const fbxFiles = entries.filter((n) => n.toLowerCase().endsWith('.fbx'))
+          const findBy = (predicate: (n: string) => boolean): string | null => {
+            const hit = fbxFiles.find((n) => predicate(n.toLowerCase()))
+            return hit ? resolvePath(folder, hit) : null
+          }
+          const idle =
+            findBy((n) => n === 'idle.fbx') ?? findBy((n) => /(^|[^a-z])idle/.test(n))
+          const walk =
+            findBy((n) => n === 'walk_in_place.fbx' || n === 'walk.fbx') ??
+            findBy((n) => /(^|[^a-z])walk/.test(n))
+          const mesh =
+            findBy((n) => n === 'character.fbx' || n === 'mesh.fbx') ??
+            findBy((n) => !/(^|[^a-z])(idle|walk)/.test(n))
+          if (!mesh || !idle || !walk) {
+            const missing = [
+              !mesh && 'mesh (.fbx)',
+              !idle && 'idle.fbx',
+              !walk && 'walk_in_place.fbx'
+            ]
+              .filter(Boolean)
+              .join(', ')
+            return { ok: false, error: `Folder is missing: ${missing}` }
+          }
+          let manifest: { id?: string; displayName?: string; description?: string } | null = null
+          const manifestPath = resolvePath(folder, 'character.json')
+          try {
+            const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<
+              string,
+              unknown
+            >
+            manifest = {
+              id: typeof raw.id === 'string' ? raw.id : undefined,
+              displayName:
+                typeof raw.display_name === 'string'
+                  ? (raw.display_name as string)
+                  : undefined,
+              description:
+                typeof raw.description === 'string' ? (raw.description as string) : undefined
+            }
+          } catch {
+            /* no manifest is fine */
+          }
+          return { ok: true, kind: 'character', folderPath: folder, mesh, idle, walk, manifest }
         }
-        // Strict-name first, then heuristic. Mesh = anything not idle/walk.
-        const idle =
-          findBy((n) => n === 'idle.fbx') ?? findBy((n) => /(^|[^a-z])idle/.test(n))
-        const walk =
-          findBy((n) => n === 'walk_in_place.fbx' || n === 'walk.fbx') ??
-          findBy((n) => /(^|[^a-z])walk/.test(n))
-        const mesh =
-          findBy((n) => n === 'character.fbx' || n === 'mesh.fbx') ??
-          findBy((n) => !/(^|[^a-z])(idle|walk)/.test(n))
-        if (!mesh || !idle || !walk) {
-          const missing = [
-            !mesh && 'mesh (.fbx)',
-            !idle && 'idle.fbx',
-            !walk && 'walk_in_place.fbx'
-          ]
-            .filter(Boolean)
-            .join(', ')
-          return { ok: false, error: `Folder is missing: ${missing}` }
+        // kind === 'scene'
+        const sceneCandidates = entries.filter((n) => {
+          const lower = n.toLowerCase()
+          return lower.endsWith('.blend') || lower.endsWith('.fbx')
+        })
+        if (sceneCandidates.length === 0) {
+          return { ok: false, error: 'Folder has no .blend or .fbx scene file.' }
         }
-        // Optional manifest pre-fill.
-        let manifest: { id?: string; displayName?: string; description?: string } | null = null
-        const manifestPath = resolvePath(folder, 'character.json')
+        // Prefer a file literally named scene.{blend,fbx}, then the first match.
+        const preferred =
+          sceneCandidates.find((n) => /^scene\.(blend|fbx)$/i.test(n)) ?? sceneCandidates[0]
+        const sceneFile = resolvePath(folder, preferred)
+        let manifest: {
+          id?: string
+          displayName?: string
+          description?: string
+          spawnPoints?: string[]
+          cameraPresets?: string[]
+          lightingPresets?: string[]
+        } | null = null
+        const manifestPath = resolvePath(folder, 'scene.json')
         try {
           const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<
             string,
@@ -449,14 +506,21 @@ app.whenReady().then(async () => {
             displayName:
               typeof raw.display_name === 'string' ? (raw.display_name as string) : undefined,
             description:
-              typeof raw.description === 'string' ? (raw.description as string) : undefined
+              typeof raw.description === 'string' ? (raw.description as string) : undefined,
+            spawnPoints: Array.isArray(raw.spawn_points)
+              ? (raw.spawn_points as string[])
+              : undefined,
+            cameraPresets: Array.isArray(raw.camera_presets)
+              ? (raw.camera_presets as string[])
+              : undefined,
+            lightingPresets: Array.isArray(raw.lighting_presets)
+              ? (raw.lighting_presets as string[])
+              : undefined
           }
         } catch {
           /* no manifest is fine */
         }
-        // suppress unused-var lint on the kind param
-        void kind
-        return { ok: true, folderPath: folder, mesh, idle, walk, manifest }
+        return { ok: true, kind: 'scene', folderPath: folder, sceneFile, manifest }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
@@ -585,6 +649,64 @@ app.whenReady().then(async () => {
         )
         assets = reloadAssets()
         return { ok: true, id: payload.id }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  // Per-file edit of an existing user-uploaded scene. Replaces the scene
+  // file in place (preserving extension) and / or rewrites the manifest
+  // fields. Bundled scenes can't be edited.
+  ipcMain.handle(
+    'updateScene',
+    async (
+      _event,
+      payload: {
+        id: string
+        scenePath?: string | null
+        displayName?: string | null
+        description?: string | null
+        spawnPoints?: string[] | null
+        cameraPresets?: string[] | null
+      }
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!assets) return { ok: false, error: 'asset registry not loaded' }
+      const existing = assets.scenes[payload.id]
+      if (!existing) return { ok: false, error: `scene '${payload.id}' not found` }
+      if (!existing.blendPath.startsWith(userAssetsDir)) {
+        return { ok: false, error: `'${payload.id}' is bundled and cannot be edited` }
+      }
+      const sceneDir = resolvePath(existing.blendPath, '..')
+      try {
+        const manifestPath = resolvePath(sceneDir, 'scene.json')
+        let manifest: Record<string, unknown> = {}
+        try {
+          manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+        } catch {
+          /* will write fresh if missing */
+        }
+        if (payload.scenePath) {
+          const ext = payload.scenePath.toLowerCase().endsWith('.fbx') ? 'fbx' : 'blend'
+          // Delete the previous scene file if its extension changed.
+          const prevName = String(manifest.blend_file ?? 'scene.blend')
+          if (prevName && !prevName.endsWith(`.${ext}`)) {
+            await rm(resolvePath(sceneDir, prevName), { force: true })
+          }
+          const sceneFile = `scene.${ext}`
+          await copyFile(payload.scenePath, resolvePath(sceneDir, sceneFile))
+          manifest.blend_file = sceneFile
+        }
+        manifest.id = payload.id
+        if (payload.displayName) manifest.display_name = payload.displayName
+        if (payload.description !== undefined && payload.description !== null) {
+          manifest.description = payload.description
+        }
+        if (payload.spawnPoints) manifest.spawn_points = payload.spawnPoints
+        if (payload.cameraPresets) manifest.camera_presets = payload.cameraPresets
+        await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
+        assets = reloadAssets()
+        return { ok: true }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
