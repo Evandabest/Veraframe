@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, dialog } from 'electron'
-import { copyFile, mkdir, open, readFile, rm, stat, writeFile } from 'fs/promises'
+import { copyFile, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import { join, resolve as resolvePath } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -387,6 +387,83 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle(
+    'pickAssetFolder',
+    async (
+      _event,
+      kind: 'character'
+    ): Promise<
+      | {
+          ok: true
+          folderPath: string
+          mesh: string
+          idle: string
+          walk: string
+          manifest: { id?: string; displayName?: string; description?: string } | null
+        }
+      | { ok: false; error: string }
+    > => {
+      const result = await dialog.showOpenDialog({
+        title: 'Pick a character folder (containing character.fbx, idle.fbx, walk_in_place.fbx)',
+        properties: ['openDirectory']
+      })
+      if (result.canceled || !result.filePaths[0]) {
+        return { ok: false, error: 'picker canceled' }
+      }
+      const folder = result.filePaths[0]
+      try {
+        const entries = (await readdir(folder)).filter((n) => !n.startsWith('.'))
+        const fbxFiles = entries.filter((n) => n.toLowerCase().endsWith('.fbx'))
+        const findBy = (predicate: (n: string) => boolean): string | null => {
+          const hit = fbxFiles.find((n) => predicate(n.toLowerCase()))
+          return hit ? resolvePath(folder, hit) : null
+        }
+        // Strict-name first, then heuristic. Mesh = anything not idle/walk.
+        const idle =
+          findBy((n) => n === 'idle.fbx') ?? findBy((n) => /(^|[^a-z])idle/.test(n))
+        const walk =
+          findBy((n) => n === 'walk_in_place.fbx' || n === 'walk.fbx') ??
+          findBy((n) => /(^|[^a-z])walk/.test(n))
+        const mesh =
+          findBy((n) => n === 'character.fbx' || n === 'mesh.fbx') ??
+          findBy((n) => !/(^|[^a-z])(idle|walk)/.test(n))
+        if (!mesh || !idle || !walk) {
+          const missing = [
+            !mesh && 'mesh (.fbx)',
+            !idle && 'idle.fbx',
+            !walk && 'walk_in_place.fbx'
+          ]
+            .filter(Boolean)
+            .join(', ')
+          return { ok: false, error: `Folder is missing: ${missing}` }
+        }
+        // Optional manifest pre-fill.
+        let manifest: { id?: string; displayName?: string; description?: string } | null = null
+        const manifestPath = resolvePath(folder, 'character.json')
+        try {
+          const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<
+            string,
+            unknown
+          >
+          manifest = {
+            id: typeof raw.id === 'string' ? raw.id : undefined,
+            displayName:
+              typeof raw.display_name === 'string' ? (raw.display_name as string) : undefined,
+            description:
+              typeof raw.description === 'string' ? (raw.description as string) : undefined
+          }
+        } catch {
+          /* no manifest is fine */
+        }
+        // suppress unused-var lint on the kind param
+        void kind
+        return { ok: true, folderPath: folder, mesh, idle, walk, manifest }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle(
     'pickAssetFile',
     async (
       _event,
@@ -508,6 +585,67 @@ app.whenReady().then(async () => {
         )
         assets = reloadAssets()
         return { ok: true, id: payload.id }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  // Per-file edit of an existing user-uploaded character. Any of mesh / idle
+  // / walk / displayName can be changed; null/undefined entries keep the
+  // current value.
+  ipcMain.handle(
+    'updateCharacter',
+    async (
+      _event,
+      payload: {
+        id: string
+        meshPath?: string | null
+        idlePath?: string | null
+        walkPath?: string | null
+        displayName?: string | null
+        description?: string | null
+      }
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!assets) return { ok: false, error: 'asset registry not loaded' }
+      const existing = assets.characters[payload.id]
+      if (!existing) return { ok: false, error: `character '${payload.id}' not found` }
+      if (!existing.meshPath.startsWith(userAssetsDir)) {
+        return { ok: false, error: `'${payload.id}' is bundled and cannot be edited` }
+      }
+      const charDir = resolvePath(existing.meshPath, '..')
+      try {
+        if (payload.meshPath) {
+          await copyFile(payload.meshPath, resolvePath(charDir, 'character.fbx'))
+        }
+        if (payload.idlePath) {
+          await copyFile(payload.idlePath, resolvePath(charDir, 'idle.fbx'))
+        }
+        if (payload.walkPath) {
+          await copyFile(payload.walkPath, resolvePath(charDir, 'walk_in_place.fbx'))
+        }
+        // Rewrite manifest with any metadata changes; keep file refs stable.
+        const manifestPath = resolvePath(charDir, 'character.json')
+        let manifest: Record<string, unknown> = {}
+        try {
+          manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+        } catch {
+          /* if missing, we'll write a fresh one */
+        }
+        manifest.id = payload.id
+        if (payload.displayName) manifest.display_name = payload.displayName
+        if (payload.description !== undefined && payload.description !== null) {
+          manifest.description = payload.description
+        }
+        manifest.mesh_file = 'character.fbx'
+        manifest.rig_type = manifest.rig_type ?? 'mixamo'
+        manifest.animations = {
+          idle: 'idle.fbx',
+          walk_in_place: 'walk_in_place.fbx'
+        }
+        await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
+        assets = reloadAssets()
+        return { ok: true }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }

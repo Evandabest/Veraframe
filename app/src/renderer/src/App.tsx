@@ -3,6 +3,7 @@ import { TimelinePanel, type PendingActionEdit } from './components/TimelinePane
 import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
+import { EditCharacterModal } from './components/EditCharacterModal'
 import type { RegistrySummary } from '../../preload'
 
 interface TimelineAction {
@@ -61,6 +62,7 @@ function App(): React.JSX.Element {
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([])
   const [uploadKind, setUploadKind] = useState<AssetKind | null>(null)
+  const [editCharacterId, setEditCharacterId] = useState<string | null>(null)
 
   const applyRegistry = (next: RegistrySummary): void => {
     setRegistry(next)
@@ -455,6 +457,7 @@ function App(): React.JSX.Element {
           onAddCharacter={() => setUploadKind('character')}
           onRemoveScene={onRemoveScene}
           onRemoveCharacter={onRemoveCharacter}
+          onEditCharacter={setEditCharacterId}
           onRefresh={refreshRegistry}
           disabled={isRunning}
         />
@@ -747,6 +750,29 @@ function App(): React.JSX.Element {
         onClose={() => setUploadKind(null)}
         onSubmitted={onUploadSubmitted}
       />
+
+      {editCharacterId && (() => {
+        const ch = registry.characters.find((c) => c.id === editCharacterId)
+        if (!ch) return null
+        // Heuristic file paths under the user-assets dir. Surfacing them is
+        // purely informational — the IPC handler resolves the actual paths
+        // from the registry server-side.
+        return (
+          <EditCharacterModal
+            open
+            characterId={ch.id}
+            initialDisplayName={ch.displayName}
+            meshPath="character.fbx"
+            idlePath="idle.fbx"
+            walkPath="walk_in_place.fbx"
+            onClose={() => setEditCharacterId(null)}
+            onSaved={async () => {
+              setEditCharacterId(null)
+              await refreshRegistry()
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }

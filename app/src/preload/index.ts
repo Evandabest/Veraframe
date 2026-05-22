@@ -68,6 +68,26 @@ export interface AddCharacterRequest {
   description?: string
 }
 
+export interface UpdateCharacterRequest {
+  id: string
+  meshPath?: string | null
+  idlePath?: string | null
+  walkPath?: string | null
+  displayName?: string | null
+  description?: string | null
+}
+
+export type PickCharacterFolderResponse =
+  | {
+      ok: true
+      folderPath: string
+      mesh: string
+      idle: string
+      walk: string
+      manifest: { id?: string; displayName?: string; description?: string } | null
+    }
+  | { ok: false; error: string }
+
 export type AddAssetResponse = { ok: true; id: string } | { ok: false; error: string }
 export type PickAssetFileResponse =
   | { ok: true; filePath: string }
@@ -150,6 +170,12 @@ const veraframe = {
     ipcRenderer.invoke('removeScene', id),
   removeCharacter: (id: string): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke('removeCharacter', id),
+  pickCharacterFolder: (): Promise<PickCharacterFolderResponse> =>
+    ipcRenderer.invoke('pickAssetFolder', 'character'),
+  updateCharacter: (
+    request: UpdateCharacterRequest
+  ): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('updateCharacter', request),
   onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
       callback(payload)

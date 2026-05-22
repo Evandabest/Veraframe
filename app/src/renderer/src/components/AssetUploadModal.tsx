@@ -62,10 +62,32 @@ export function AssetUploadModal({
 
   const pickMainFile = async (): Promise<void> => {
     setPickerError(null)
+    // Characters use a folder picker; scenes still use a single file picker.
+    if (kind === 'character') {
+      const result = await window.veraframe.pickCharacterFolder()
+      if (result.ok) {
+        setFilePath(result.mesh)
+        setIdlePath(result.idle)
+        setWalkPath(result.walk)
+        if (result.manifest?.id) setId(result.manifest.id)
+        else {
+          const base = result.folderPath.replace(/^.*[\\/]/, '')
+          const sanitized = base
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+          setId(sanitized)
+        }
+        setDisplayName(result.manifest?.displayName ?? result.folderPath.replace(/^.*[\\/]/, ''))
+        if (result.manifest?.description) setDescription(result.manifest.description)
+      } else if (result.error !== 'picker canceled') {
+        setPickerError(result.error)
+      }
+      return
+    }
     const result = await window.veraframe.pickAssetFile(kind)
     if (result.ok) {
       setFilePath(result.filePath)
-      // Auto-fill an id and display name from the chosen filename.
       const base = result.filePath.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
       const sanitized = base.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
       setId(sanitized)
@@ -148,7 +170,7 @@ export function AssetUploadModal({
           <p className="mt-1 text-xs text-neutral-400">
             {kind === 'scene'
               ? 'Pick a .blend or .fbx scene; we’ll copy it to the user-data dir and write a manifest. The names you give for spawn points and cameras must match the Empty / Camera object names inside the scene file. Tip: rotate each spawn-point Empty in Blender to set the character’s starting facing — Empties left at the default (0,0,0) auto-rotate the character toward the active camera.'
-              : 'Pick a .fbx mesh + your own idle.fbx and walk.fbx animations. The body must use Mixamo-style bone names so walk/idle/turn/look bind correctly. VRM-style face shape keys (Joy, Sorrow, Blink, A/I/U/E/O visemes) are optional — without them the smile / frown / blink / talk actions become no-ops, but the character will still walk and idle fine.'}
+              : 'Pick a FOLDER containing character.fbx (mesh + rig), idle.fbx, and walk_in_place.fbx (filenames can also include those words in a longer name). The body must use Mixamo-style bone names. VRM-style face shape keys (Joy, Sorrow, Blink, A/I/U/E/O visemes) are optional — missing them just makes smile/frown/blink/talk no-ops. If the folder contains a character.json, we pre-fill the metadata from it.'}
           </p>
         </header>
 
@@ -156,12 +178,12 @@ export function AssetUploadModal({
 
         <FilePickerField
           label={
-            kind === 'scene' ? 'Scene file (.blend or .fbx)' : 'Character mesh (.fbx)'
+            kind === 'scene' ? 'Scene file (.blend or .fbx)' : 'Character folder'
           }
           hint={
             kind === 'scene'
               ? 'Either a Blender .blend or an exported .fbx scene. Spawn-point Empties and Camera objects must already exist in the file with the names below.'
-              : 'The .fbx mesh with the Mixamo-style rig.'
+              : 'Folder with mesh + idle + walk FBX files (any filename containing "idle" or "walk" works).'
           }
           value={filePath}
           onPick={pickMainFile}
@@ -227,14 +249,14 @@ export function AssetUploadModal({
             {kind === 'character' && (
               <>
                 <FilePickerField
-                  label="Idle animation (.fbx)"
-                  hint="Mixamo-style idle clip. Bone names must match the mesh rig."
+                  label="Idle animation (auto-detected from folder)"
+                  hint="Override only if the folder picker grabbed the wrong file."
                   value={idlePath}
                   onPick={() => pickAuxFile(setIdlePath)}
                 />
                 <FilePickerField
-                  label="Walk animation (.fbx)"
-                  hint="Mixamo walk-in-place clip (no root motion). The executor adds the translation curve."
+                  label="Walk animation (auto-detected from folder)"
+                  hint="Override only if the folder picker grabbed the wrong file."
                   value={walkPath}
                   onPick={() => pickAuxFile(setWalkPath)}
                 />

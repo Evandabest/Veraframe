@@ -25,6 +25,7 @@ export interface AssetsPanelProps {
   onAddCharacter: () => void
   onRemoveScene: (id: string) => void
   onRemoveCharacter: (id: string) => void
+  onEditCharacter: (id: string) => void
   onRefresh: () => void
   disabled?: boolean
 }
@@ -40,6 +41,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
     onAddCharacter,
     onRemoveScene,
     onRemoveCharacter,
+    onEditCharacter,
     onRefresh,
     disabled = false
   } = props
@@ -74,6 +76,7 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
         onToggleCharacter={onToggleCharacter}
         onAddCharacter={onAddCharacter}
         onRemoveCharacter={onRemoveCharacter}
+        onEditCharacter={onEditCharacter}
         disabled={disabled}
       />
     </div>
@@ -192,6 +195,7 @@ interface CharacterRowProps {
   onToggleCharacter: (id: string, checked: boolean) => void
   onAddCharacter: () => void
   onRemoveCharacter: (id: string) => void
+  onEditCharacter: (id: string) => void
   disabled: boolean
 }
 
@@ -201,6 +205,7 @@ function CharacterRow({
   onToggleCharacter,
   onAddCharacter,
   onRemoveCharacter,
+  onEditCharacter,
   disabled
 }: CharacterRowProps): React.JSX.Element {
   const selectedSet = new Set(selectedCharacterIds)
@@ -265,9 +270,26 @@ function CharacterRow({
               character will still walk and idle normally.
             </li>
           </ul>
+          <p className="mt-2 font-semibold text-neutral-100">Have a VRM character?</p>
+          <p className="mt-1 text-neutral-400">
+            Bring the VRM into Blender, run it through{' '}
+            <a
+              href="https://www.mixamo.com/"
+              className="text-blue-300 underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Mixamo
+            </a>
+            's auto-rigger (or hand-name your bones to Mixamo's convention),
+            then export to FBX with shape keys preserved. VRM's face
+            blendshape names already match what the smile / frown / blink /
+            talk actions expect.
+          </p>
           <p className="mt-2 text-neutral-400">
             Tick characters you want available for the LLM. Uncheck all to let
-            the LLM pick from the full pool.
+            the LLM pick from the full pool. ✎ swaps individual files on a
+            user-uploaded character; × removes one entirely.
           </p>
         </InfoTip>
       </div>
@@ -302,15 +324,26 @@ function CharacterRow({
                 </span>
               </label>
               {c.userProvided && (
-                <button
-                  type="button"
-                  onClick={() => onRemoveCharacter(c.id)}
-                  disabled={disabled}
-                  title={`Remove ${c.displayName}`}
-                  className="ml-1 rounded text-red-300 hover:text-red-100 disabled:opacity-50"
-                >
-                  ×
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onEditCharacter(c.id)}
+                    disabled={disabled}
+                    title={`Edit ${c.displayName} (swap files)`}
+                    className="ml-1 rounded text-neutral-400 hover:text-neutral-100 disabled:opacity-50"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveCharacter(c.id)}
+                    disabled={disabled}
+                    title={`Remove ${c.displayName}`}
+                    className="rounded text-red-300 hover:text-red-100 disabled:opacity-50"
+                  >
+                    ×
+                  </button>
+                </>
               )}
             </div>
           )
