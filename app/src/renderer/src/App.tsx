@@ -584,6 +584,18 @@ function App(): React.JSX.Element {
           )}
           {state.status === 'success' && (
             <>
+              {/* Video sits at the top of the right column so its top edge
+                  aligns with the controls panel's top edge in the grid. The
+                  Save Video / "rendered in Xs" status sits beneath it. */}
+              <video
+                ref={videoRef}
+                key={state.videoUrl}
+                src={state.videoUrl}
+                controls
+                autoPlay
+                loop
+                className="w-full rounded-md border border-neutral-800"
+              />
               <div className="flex items-center justify-between">
                 <p className="text-sm text-neutral-400">
                   Rendered {state.durationSec.toFixed(1)}s
@@ -602,15 +614,6 @@ function App(): React.JSX.Element {
               {saveNote && (
                 <p className="text-xs text-neutral-500 break-all">{saveNote}</p>
               )}
-              <video
-                ref={videoRef}
-                key={state.videoUrl}
-                src={state.videoUrl}
-                controls
-                autoPlay
-                loop
-                className="w-full rounded-md border border-neutral-800"
-              />
               <TimelinePanel
                 timeline={state.timeline}
                 videoRef={videoRef}
