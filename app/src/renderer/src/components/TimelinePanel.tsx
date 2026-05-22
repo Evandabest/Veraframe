@@ -92,6 +92,9 @@ const ACTION_COLORS: Record<string, [string, string]> = {
   frown: ['bg-pink-500/60', 'border-pink-400'],
   blink: ['bg-pink-500/40', 'border-pink-400'],
   talk: ['bg-purple-600/70', 'border-purple-400'],
+  nod: ['bg-teal-600/70', 'border-teal-400'],
+  shake_head: ['bg-teal-500/60', 'border-teal-400'],
+  wave: ['bg-teal-500/40', 'border-teal-400'],
   camera_cut: ['bg-cyan-600/70', 'border-cyan-400'],
   camera_dolly: ['bg-cyan-500/60', 'border-cyan-400'],
   set_lighting: ['bg-yellow-600/70', 'border-yellow-400']

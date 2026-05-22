@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from planner.schema import Emotion
+from planner.schema import Emotion, IdleStyle, WalkStyle
 
 # ---------------------------------------------------------------------------
 # Manifest models — what each asset's manifest file on disk looks like.
@@ -97,6 +97,8 @@ _TIMING_PARAMS = (
 )
 
 _EMOTION_VALUES = tuple(e.value for e in Emotion)
+_WALK_STYLE_VALUES = tuple(s.value for s in WalkStyle)
+_IDLE_STYLE_VALUES = tuple(s.value for s in IdleStyle)
 
 DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
@@ -111,6 +113,16 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
                 required=False,
                 enum=_EMOTION_VALUES,
             ),
+            ParamSpec(
+                name="style",
+                description=(
+                    "Gait flavour. Adjusts the walk-cycle playback speed: 'run' and "
+                    "'jog' play faster, 'sneak' and 'limp' slower, 'march' is "
+                    "stiffer-paced. Defaults to 'walk'."
+                ),
+                required=False,
+                enum=_WALK_STYLE_VALUES,
+            ),
             *_TIMING_PARAMS,
         ),
     ),
@@ -124,6 +136,16 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
                 description="Emotional flavour applied during the idle.",
                 required=False,
                 enum=_EMOTION_VALUES,
+            ),
+            ParamSpec(
+                name="style",
+                description=(
+                    "Postural flavour for the idle (e.g. 'tired' slumps, 'alert' "
+                    "stands up straighter). Currently informational; the executor "
+                    "uses the base idle clip regardless."
+                ),
+                required=False,
+                enum=_IDLE_STYLE_VALUES,
             ),
             *_TIMING_PARAMS,
         ),
@@ -218,6 +240,45 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
             ParamSpec(
                 name="gesture",
                 description="Optional short gesture name (e.g. 'small_step_back').",
+                required=False,
+            ),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
+        name="nod",
+        description=(
+            "Yes-nod: a short vertical head-bone pitch oscillation. Good for "
+            "agreement, acknowledgement, or thanks. ~0.5-1.5s typical."
+        ),
+        params=(
+            ParamSpec(name="character", description="ID of a loaded character."),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
+        name="shake_head",
+        description=(
+            "No-shake: a short horizontal head-bone yaw oscillation. Disagreement, "
+            "refusal, disbelief. ~0.5-1.5s typical."
+        ),
+        params=(
+            ParamSpec(name="character", description="ID of a loaded character."),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
+        name="wave",
+        description=(
+            "A friendly wave with the right arm. The upper arm raises and the "
+            "forearm oscillates. ~1.5-3s typical. Pair with look_at(target) for "
+            "directional waves."
+        ),
+        params=(
+            ParamSpec(name="character", description="ID of a loaded character."),
+            ParamSpec(
+                name="target",
+                description="Spawn point or character ID being waved at (optional).",
                 required=False,
             ),
             *_TIMING_PARAMS,

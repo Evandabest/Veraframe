@@ -21,9 +21,12 @@ from actions import camera_dolly as camera_dolly_action
 from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
+from actions import nod as nod_action
 from actions import point_at as point_at_action
 from actions import set_lighting as set_lighting_action
+from actions import shake_head as shake_head_action
 from actions import sit as sit_action
+from actions import wave as wave_action
 from actions import smile as smile_action
 from actions import stand as stand_action
 from actions import talk as talk_action
@@ -121,6 +124,10 @@ def execute_timeline(
 
             if atype in ("smile", "frown", "blink"):
                 _dispatch_emotion(action, characters, fps, executed, skipped)
+                continue
+
+            if atype in ("nod", "shake_head", "wave"):
+                _dispatch_gesture(action, characters, fps, executed, skipped)
                 continue
 
             if atype == "camera_cut":
@@ -388,6 +395,7 @@ def _dispatch_walk_to(
             start_frame,
             end_frame,
             action_id=action_id,
+            style=action.get("style"),
         )
     except walk_to_action.WalkToActionError as e:
         skipped.append({"id": action_id, "type": "walk_to", "reason": str(e)})
@@ -687,6 +695,50 @@ def _dispatch_camera_cut(
         return
 
     executed.append({"id": action_id, "type": "camera_cut", **result})
+
+
+_GESTURE_HANDLERS = {
+    "nod": nod_action.execute,
+    "shake_head": shake_head_action.execute,
+    "wave": wave_action.execute,
+}
+
+
+def _dispatch_gesture(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    atype = action.get("type")
+    char_id = action.get("character")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": atype,
+                "reason": f"character '{char_id}' not loaded",
+            }
+        )
+        return
+
+    handler = _GESTURE_HANDLERS.get(atype)
+    if handler is None:
+        skipped.append({"id": action_id, "type": atype, "reason": "no gesture handler"})
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = handler(armature, start_frame, end_frame, action_id=action_id)
+    except Exception as e:  # noqa: BLE001
+        skipped.append({"id": action_id, "type": atype, "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": atype, **result})
 
 
 def _dispatch_camera_dolly(

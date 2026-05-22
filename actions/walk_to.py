@@ -34,6 +34,19 @@ def clear_cache() -> None:
     _LOADED_ACTIONS.clear()
 
 
+_STYLE_SPEED_MULTIPLIER: dict[str, float] = {
+    # Multiplier applied to the walk clip's repeat count. >1 = legs cycle
+    # faster (run / jog feel); <1 = slower (sneak / limp). 'march' is barely
+    # faster but accompanied by stiffer body language we don't model yet.
+    "walk": 1.0,
+    "run": 1.6,
+    "jog": 1.3,
+    "sneak": 0.65,
+    "march": 1.1,
+    "limp": 0.75,
+}
+
+
 def execute(
     armature,
     animation_fbx_path: str,
@@ -41,11 +54,16 @@ def execute(
     start_frame: int,
     end_frame: int,
     action_id: str = "walk",
+    style: str | None = None,
 ) -> dict:
     """Walk `armature` from its current location to `target_location`.
 
     Places the walk NLA strip (so the legs cycle) and drives armature
-    location linearly from current → target over the frame range.
+    location linearly from current → target over the frame range. `style`
+    is one of WalkStyle (walk/run/jog/sneak/march/limp); unknown values
+    fall back to 'walk'. Style affects the leg-cycle speed by multiplying
+    the strip's repeat count — root translation timing is unchanged so the
+    character still arrives exactly at end_frame.
     """
     if bpy is None:
         raise WalkToActionError("bpy unavailable")
@@ -114,7 +132,8 @@ def execute(
     # because assigning frame_end resets repeat back to 1.0 in Blender 5.x.
     action_length = max(1.0, action.frame_range[1] - action.frame_range[0])
     desired_duration = max(1.0, int(end_frame) - int(start_frame))
-    strip.repeat = desired_duration / action_length
+    speed_mult = _STYLE_SPEED_MULTIPLIER.get(style or "walk", 1.0)
+    strip.repeat = (desired_duration / action_length) * speed_mult
     # The translation strip below holds world position after the walk. The
     # body strip itself must not hold outside the walk window, or it can mask
     # subsequent body actions on overlapping NLA evaluation.

@@ -19,6 +19,32 @@ class Emotion(StrEnum):
     FUN = "fun"
 
 
+class WalkStyle(StrEnum):
+    """Gait flavor applied to walk_to. The executor maps these to NLA-strip
+    speed multipliers on top of the standard walk_in_place clip — no
+    per-style FBX required. Sneak is the slowest, run the fastest."""
+
+    WALK = "walk"
+    RUN = "run"
+    JOG = "jog"
+    SNEAK = "sneak"
+    MARCH = "march"
+    LIMP = "limp"
+
+
+class IdleStyle(StrEnum):
+    """Emotional/postural flavor applied to idle. Currently informational —
+    the LLM picks a style and downstream tools can branch on it, but the
+    executor doesn't yet have per-style idle clips."""
+
+    NEUTRAL = "neutral"
+    TIRED = "tired"
+    ALERT = "alert"
+    CONFIDENT = "confident"
+    BORED = "bored"
+    NERVOUS = "nervous"
+
+
 class ActionType(StrEnum):
     WALK_TO = "walk_to"
     IDLE = "idle"
@@ -31,6 +57,9 @@ class ActionType(StrEnum):
     FROWN = "frown"
     BLINK = "blink"
     TALK = "talk"
+    NOD = "nod"
+    SHAKE_HEAD = "shake_head"
+    WAVE = "wave"
     CAMERA_CUT = "camera_cut"
     CAMERA_DOLLY = "camera_dolly"
     SET_LIGHTING = "set_lighting"
@@ -55,12 +84,14 @@ class WalkToAction(_TimedBase):
     character: str = Field(min_length=1)
     target: str = Field(min_length=1)
     emotion: Emotion | None = None
+    style: WalkStyle | None = None
 
 
 class IdleAction(_TimedBase):
     type: Literal["idle"] = "idle"
     character: str = Field(min_length=1)
     emotion: Emotion | None = None
+    style: IdleStyle | None = None
 
 
 class TurnToAction(_TimedBase):
@@ -115,6 +146,28 @@ class TalkAction(_TimedBase):
     gesture: str | None = None
 
 
+class NodAction(_TimedBase):
+    """Vertical head-bone pitch oscillation (yes-nod)."""
+
+    type: Literal["nod"] = "nod"
+    character: str = Field(min_length=1)
+
+
+class ShakeHeadAction(_TimedBase):
+    """Horizontal head-bone yaw oscillation (no-shake)."""
+
+    type: Literal["shake_head"] = "shake_head"
+    character: str = Field(min_length=1)
+
+
+class WaveAction(_TimedBase):
+    """Right-arm wave — raises and oscillates the forearm."""
+
+    type: Literal["wave"] = "wave"
+    character: str = Field(min_length=1)
+    target: str | None = None  # optional spawn point / character to wave at
+
+
 class CameraCutAction(_TimedBase):
     type: Literal["camera_cut"] = "camera_cut"
     camera: str = Field(min_length=1)
@@ -143,6 +196,9 @@ Action = Annotated[
     | FrownAction
     | BlinkAction
     | TalkAction
+    | NodAction
+    | ShakeHeadAction
+    | WaveAction
     | CameraCutAction
     | CameraDollyAction
     | SetLightingAction,
