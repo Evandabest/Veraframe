@@ -23,7 +23,7 @@ type LLMProvider = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 const PROVIDER_DEFAULT_MODEL: Record<LLMProvider, string> = {
   openai: 'gpt-4o',
   anthropic: 'claude-3-5-sonnet-20241022',
-  gemini: 'gemini-1.5-pro',
+  gemini: 'gemini-3.1-flash-lite',
   ollama: 'llama3.1'
 }
 
