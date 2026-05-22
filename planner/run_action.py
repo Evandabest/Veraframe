@@ -115,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         temperature=0.2,
     )
     content = response.choices[0].message.content or ""
+    print(f"[run_action] response from {config.model_string}:", file=sys.stderr)
+    print(content, file=sys.stderr)
     wrapped = ActionResponse.model_validate_json(content)
 
     # Overwrite the fields the caller has authority over.

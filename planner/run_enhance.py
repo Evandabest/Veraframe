@@ -78,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         temperature=0.3,
     )
     content = response.choices[0].message.content or ""
+    print(f"[run_enhance] response from {config.model_string}:", file=sys.stderr)
+    print(content, file=sys.stderr)
     sys.stdout.write(content.strip() + "\n")
     return 0
 

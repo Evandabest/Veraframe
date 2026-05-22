@@ -7,6 +7,7 @@ exist?) and the retry-with-feedback loop live in `planner.validator`.
 """
 
 import os
+import sys
 from dataclasses import dataclass
 
 import litellm
@@ -110,6 +111,11 @@ def generate_timeline(
     )
 
     content = response.choices[0].message.content
+    # Mirror the raw LLM output to stderr so the Electron app's [planner]
+    # forwarder shows it in the terminal. Helpful for debugging when the
+    # model emits malformed JSON the validator then retries.
+    print(f"[llm_client] response from {config.model_string}:", file=sys.stderr)
+    print(content, file=sys.stderr)
     return Project.model_validate_json(content)
 
 
