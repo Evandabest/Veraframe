@@ -26,9 +26,10 @@ export interface ActionEditorProps {
   original: ActionLike | null
   /** Lane (character handle) the action belongs to. Shown for context. */
   laneId: string
-  /** Time window the new action will occupy (fixed by the lane). */
+  /** Start time the new action will use (fixed by the lane). */
   startSec: number
-  endSec: number
+  /** Locked end time (edit flow). Null = LLM chooses duration. */
+  endSec: number | null
   /** Filled in by App after the LLM call returns. */
   pendingAction: ActionLike | null
   /** True while the LLM call is in-flight. */
@@ -39,6 +40,9 @@ export interface ActionEditorProps {
   onAccept: () => void
   onReject: () => void
   onClose: () => void
+  /** Optional: rewrite the prompt to use registry names. Mirrors the main
+   *  Enhance button. Returns the rewritten text or throws/null on failure. */
+  onEnhance?: (prompt: string) => Promise<string | null>
 }
 
 export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null {
@@ -54,10 +58,13 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
     onGenerate,
     onAccept,
     onReject,
-    onClose
+    onClose,
+    onEnhance
   } = props
 
   const [prompt, setPrompt] = useState('')
+  const [enhancing, setEnhancing] = useState(false)
+  const [enhanceError, setEnhanceError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Reset the prompt and focus the textarea each time the modal opens for a
@@ -65,6 +72,7 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
   useEffect(() => {
     if (open) {
       setPrompt('')
+      setEnhanceError(null)
       // Wait a tick so the element exists.
       setTimeout(() => textareaRef.current?.focus(), 30)
     }
@@ -74,6 +82,26 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
 
   const submitDisabled = !prompt.trim() || generating || pendingAction !== null
   const flowLabel = original ? 'Edit action' : 'Add action'
+  const timeLabel =
+    endSec !== null
+      ? `${startSec.toFixed(1)}s–${endSec.toFixed(1)}s`
+      : `from ${startSec.toFixed(1)}s · duration set by LLM`
+
+  const onEnhanceClick = async (): Promise<void> => {
+    if (!onEnhance || !prompt.trim() || enhancing) return
+    setEnhanceError(null)
+    setEnhancing(true)
+    try {
+      const rewritten = await onEnhance(prompt)
+      if (rewritten && rewritten.trim()) {
+        setPrompt(rewritten.trim())
+      }
+    } catch (e) {
+      setEnhanceError((e as Error).message)
+    } finally {
+      setEnhancing(false)
+    }
+  }
 
   return (
     <div
@@ -87,7 +115,7 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
         <header className="flex items-baseline justify-between">
           <h3 className="text-base font-semibold text-neutral-100">{flowLabel}</h3>
           <span className="font-mono text-xs text-neutral-500">
-            {laneId} · {startSec.toFixed(1)}s–{endSec.toFixed(1)}s
+            {laneId} · {timeLabel}
           </span>
         </header>
 
@@ -106,14 +134,30 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
           <label className="text-xs text-neutral-400">
             What should the character do during this slot?
           </label>
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={generating}
-            placeholder='e.g. "smile while looking at the robot" or "walk to the door"'
-            className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              disabled={generating || enhancing}
+              placeholder='e.g. "smile while looking at the robot" or "walk to the door"'
+              className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 pr-24 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            />
+            {onEnhance && (
+              <button
+                type="button"
+                onClick={onEnhanceClick}
+                disabled={enhancing || generating || !prompt.trim()}
+                title="Rewrite the prompt using registry asset names"
+                className="absolute right-2 top-2 rounded-md border border-purple-500/60 bg-purple-600/30 px-2 py-1 text-xs font-medium text-purple-200 hover:bg-purple-600/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {enhancing ? 'Enhancing…' : '✨ Enhance'}
+              </button>
+            )}
+          </div>
+          {enhanceError && (
+            <p className="text-xs text-red-400">Enhance failed: {enhanceError}</p>
+          )}
         </div>
 
         {error && <p className="text-xs text-red-400">{error}</p>}
