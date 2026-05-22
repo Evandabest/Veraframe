@@ -200,6 +200,7 @@ function App(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider])
   const [state, setState] = useState<RenderState>({ status: 'idle' })
+  const [quality, setQuality] = useState<'draft' | 'hifi'>('hifi')
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -924,14 +925,36 @@ function App(): React.JSX.Element {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={onRender}
-            disabled={disabledSubmit}
-            className="self-start rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
-          >
-            {isRunning ? 'Rendering…' : 'Render'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onRender}
+              disabled={disabledSubmit}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
+            >
+              {isRunning ? 'Rendering…' : 'Render'}
+            </button>
+            <div
+              className="inline-flex overflow-hidden rounded-md border border-neutral-700 text-xs"
+              title="Draft: low-resolution, single-sample — fast iteration. Hi-fi: full quality."
+            >
+              {(['draft', 'hifi'] as const).map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuality(q)}
+                  disabled={isRunning}
+                  className={`px-3 py-1.5 transition-colors ${
+                    quality === q
+                      ? 'bg-blue-500/30 text-blue-100'
+                      : 'bg-neutral-950 text-neutral-400 hover:bg-neutral-800'
+                  }`}
+                >
+                  {q === 'draft' ? 'Draft' : 'Hi-fi'}
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
         </div>
 
