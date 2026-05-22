@@ -243,8 +243,9 @@ function App(): React.JSX.Element {
 
   const onAddAction = (laneId: string, startSec: number): void => {
     if (state.status !== 'success') return
-    const remaining = state.durationSec - startSec
-    const endSec = Math.min(state.durationSec, startSec + Math.max(2, Math.min(remaining, 2)))
+    // Default new block duration. If startSec is at or past the current end,
+    // the timeline grows by this amount on accept.
+    const endSec = startSec + 2
     setEditor({ laneId, startSec, endSec, original: null })
     setPendingAction(null)
     setActionError(null)
@@ -292,6 +293,12 @@ function App(): React.JSX.Element {
       )
     } else {
       targetShot.actions = [...targetShot.actions, pendingAction]
+    }
+    // If the new action extends past the current shot end, grow the shot so
+    // the render pipeline (which derives durationSec from max shot.end) emits
+    // a longer MP4. This is how the timeline "extends".
+    if (pendingAction.end > targetShot.end) {
+      targetShot.end = pendingAction.end
     }
     closeEditor()
 

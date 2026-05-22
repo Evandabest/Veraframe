@@ -127,7 +127,18 @@ export function TimelinePanel({
     lanes.push({ id: SCENE_LANE_ID, label: 'scene', actions: sceneActions })
   }
 
-  const seconds = Math.max(1, Math.ceil(durationSec))
+  // `durationSec` is the rendered video's length. `displayDuration` is the
+  // width of the timeline canvas — wider than the video when a pending edit
+  // extends past the current end so the new block is actually visible.
+  const pendingExtension =
+    pendingEdit && pendingEdit.newAction.end > durationSec ? pendingEdit.newAction.end : 0
+  const lastLaneEnd = Math.max(
+    0,
+    ...lanes.flatMap((l) => l.actions.map((a) => a.end))
+  )
+  const displayDuration = Math.max(durationSec, lastLaneEnd, pendingExtension)
+
+  const seconds = Math.max(1, Math.ceil(displayDuration))
   const ticks = Array.from({ length: seconds + 1 }, (_, i) => i)
 
   // Refs for the rAF playhead loop and click/drag bookkeeping.
@@ -146,14 +157,18 @@ export function TimelinePanel({
     const tick = (): void => {
       const playhead = playheadRef.current
       const content = contentRef.current
-      if (playhead && content && durationSec > 0) {
+      if (playhead && content && displayDuration > 0) {
         const rect = content.getBoundingClientRect()
         let pct: number
         if (isScrubbingRef.current && isDraggingRef.current) {
           pct = (lastPointerXRef.current - rect.left) / rect.width
         } else {
           const video = videoRef.current
-          pct = video ? video.currentTime / durationSec : 0
+          // displayDuration may be larger than the actual video (pending
+          // extension). Playhead reads currentTime relative to displayDuration
+          // so it visually stops at videoDuration / displayDuration — making
+          // the "unrendered" tail beyond it visually clear.
+          pct = video ? video.currentTime / displayDuration : 0
         }
         const clamped = Math.max(0, Math.min(1, pct))
         playhead.style.transform = `translate3d(${clamped * rect.width}px, 0, 0)`
@@ -162,13 +177,16 @@ export function TimelinePanel({
     }
     rafId = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafId)
-  }, [durationSec, videoRef])
+  }, [displayDuration, videoRef])
 
   const seekFromClientX = (clientX: number): void => {
-    if (!onSeek || !contentRef.current || durationSec <= 0) return
+    if (!onSeek || !contentRef.current || displayDuration <= 0) return
     const rect = contentRef.current.getBoundingClientRect()
     const ratio = (clientX - rect.left) / rect.width
-    onSeek(Math.max(0, Math.min(durationSec, ratio * durationSec)))
+    // Time is computed against displayDuration but clamped to videoDuration so
+    // the user can't seek into the (not-yet-rendered) extension area.
+    const timeSec = Math.max(0, Math.min(durationSec, ratio * displayDuration))
+    onSeek(timeSec)
   }
 
   /** Resolve a click on a lane: if it landed inside an action block, edit
@@ -179,12 +197,13 @@ export function TimelinePanel({
     rect: DOMRect
   ): void => {
     const ratio = (clientX - rect.left) / rect.width
-    const timeSec = Math.max(0, Math.min(durationSec, ratio * durationSec))
+    const timeSec = Math.max(0, Math.min(displayDuration, ratio * displayDuration))
     const hit = lane.actions.find((a) => timeSec >= a.start && timeSec < a.end)
     if (hit && onEditAction) {
       onEditAction(hit, lane.id)
     } else if (onSeek) {
-      onSeek(timeSec)
+      // Clamp seek to videoDuration; clicks past the video end snap to the end.
+      onSeek(Math.min(timeSec, durationSec))
     }
   }
 
@@ -256,16 +275,25 @@ export function TimelinePanel({
     seekFromClientX(event.clientX)
   }
 
-  // Lane "+" button position: just after the last action's end (or 0 if
-  // empty). The new action's default window is min(2s, durationSec - start).
+  // Lane "+" button: always shown. Sits at the end of the lane's content. If
+  // the lane is already full to durationSec, the new action starts at the
+  // current end and extends the video. Position uses displayDuration so the
+  // button is correctly placed even when a pending edit has stretched the
+  // visible canvas.
   const addButtonFor = (lane: { id: string; actions: TimelineAction[] }): {
     startSec: number
     leftPct: number
+    extending: boolean
   } | null => {
     if (!onAddAction) return null
     const lastEnd = lane.actions.reduce((acc, a) => Math.max(acc, a.end), 0)
-    if (lastEnd >= durationSec - 0.05) return null
-    return { startSec: lastEnd, leftPct: (lastEnd / durationSec) * 100 }
+    const startSec = Math.max(lastEnd, durationSec)
+    const extending = startSec >= durationSec - 0.05
+    return {
+      startSec,
+      leftPct: (startSec / displayDuration) * 100,
+      extending
+    }
   }
 
   return (
@@ -314,7 +342,7 @@ export function TimelinePanel({
               style={{ touchAction: 'none' }}
             >
               {ticks.map((t) => {
-                const leftPct = (t / durationSec) * 100
+                const leftPct = (t / displayDuration) * 100
                 const isLast = t === ticks[ticks.length - 1]
                 return (
                   <Fragment key={t}>
@@ -353,11 +381,23 @@ export function TimelinePanel({
                   className={`relative h-8 rounded bg-neutral-950/60 ${scrubbingCursor ? 'cursor-grabbing' : 'cursor-pointer'}`}
                   style={{ touchAction: 'none' }}
                 >
+                  {/* Subtle "extension area" shading past the current video
+                      end so the user knows that region isn't rendered yet. */}
+                  {displayDuration > durationSec && (
+                    <div
+                      className="pointer-events-none absolute inset-y-0 rounded-r bg-emerald-500/5"
+                      style={{
+                        left: `${(durationSec / displayDuration) * 100}%`,
+                        right: 0
+                      }}
+                    />
+                  )}
+
                   {/* Existing action blocks (purely visual — clicks resolved
                       by the lane's pointer handlers above). */}
                   {lane.actions.map((action) => {
-                    const left = (action.start / durationSec) * 100
-                    const width = ((action.end - action.start) / durationSec) * 100
+                    const left = (action.start / displayDuration) * 100
+                    const width = ((action.end - action.start) / displayDuration) * 100
                     const [bg, border] = ACTION_COLORS[action.type] ?? DEFAULT_COLORS
                     const isBeingReplaced = pendingForLane?.originalActionId === action.id
                     return (
@@ -376,8 +416,8 @@ export function TimelinePanel({
                       with a thick emerald ring so the user can compare. */}
                   {pendingForLane && (() => {
                     const newAction = pendingForLane.newAction
-                    const left = (newAction.start / durationSec) * 100
-                    const width = ((newAction.end - newAction.start) / durationSec) * 100
+                    const left = (newAction.start / displayDuration) * 100
+                    const width = ((newAction.end - newAction.start) / displayDuration) * 100
                     const [bg] = ACTION_COLORS[newAction.type] ?? DEFAULT_COLORS
                     return (
                       <div
@@ -401,8 +441,16 @@ export function TimelinePanel({
                         e.stopPropagation()
                         onAddAction?.(lane.id, addBtn.startSec)
                       }}
-                      title={`Add action at ${addBtn.startSec.toFixed(1)}s`}
-                      className="absolute top-1 z-30 flex h-6 w-6 items-center justify-center rounded border border-dashed border-neutral-500 bg-neutral-900/80 text-neutral-300 hover:border-neutral-300 hover:text-white"
+                      title={
+                        addBtn.extending
+                          ? `Extend timeline past ${durationSec.toFixed(1)}s`
+                          : `Add action at ${addBtn.startSec.toFixed(1)}s`
+                      }
+                      className={`absolute top-1 z-30 flex h-6 w-6 items-center justify-center rounded border text-sm transition-colors ${
+                        addBtn.extending
+                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/40'
+                          : 'border-dashed border-neutral-500 bg-neutral-900/80 text-neutral-300 hover:border-neutral-300 hover:text-white'
+                      }`}
                       style={{ left: `calc(${addBtn.leftPct}% + 4px)` }}
                     >
                       +
