@@ -31,6 +31,9 @@ renders/
 /renders/*.jpg
 /renders/*.jpeg
 
+/IMPLEMENTATION.md
+/PLAN.md
+
 # OS
 .DS_Store
 Thumbs.db
