@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { TimelinePanel, type PendingActionEdit } from './components/TimelinePanel'
 import { ActionEditor } from './components/ActionEditor'
+import { AssetsPanel } from './components/AssetsPanel'
+import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
+import type { RegistrySummary } from '../../preload'
 
 interface TimelineAction {
   id: string
@@ -50,6 +53,49 @@ type RenderState =
 function App(): React.JSX.Element {
   const [mode, setMode] = useState<'mock' | 'llm'>('mock')
   const [prompt, setPrompt] = useState('')
+
+  // Asset pool. Loaded from main at startup; refreshed on upload / explicit
+  // refresh. The first scene becomes the default selection. Characters default
+  // to all-selected so the LLM has the widest pool to pick from.
+  const [registry, setRegistry] = useState<RegistrySummary>({ scenes: [], characters: [] })
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
+  const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([])
+  const [uploadKind, setUploadKind] = useState<AssetKind | null>(null)
+
+  const applyRegistry = (next: RegistrySummary): void => {
+    setRegistry(next)
+    setSelectedSceneId((prev) => {
+      if (prev && next.scenes.some((s) => s.id === prev)) return prev
+      return next.scenes[0]?.id ?? null
+    })
+    setSelectedCharacterIds((prev) => {
+      // Drop characters that vanished; keep selected ones that still exist.
+      const stillThere = prev.filter((id) => next.characters.some((c) => c.id === id))
+      if (stillThere.length > 0) return stillThere
+      return next.characters.map((c) => c.id)
+    })
+  }
+
+  useEffect(() => {
+    window.veraframe.getRegistry().then(applyRegistry)
+  }, [])
+
+  const refreshRegistry = async (): Promise<void> => {
+    const result = await window.veraframe.rescanRegistry()
+    if (result.ok) applyRegistry(result.registry)
+  }
+
+  const onToggleCharacter = (id: string, checked: boolean): void => {
+    setSelectedCharacterIds((prev) =>
+      checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id)
+    )
+  }
+
+  const onUploadSubmitted = async (): Promise<void> => {
+    setUploadKind(null)
+    await refreshRegistry()
+  }
+
   const [provider, setProvider] = useState<LLMProvider>('openai')
   const [model, setModel] = useState<string>(PROVIDER_DEFAULT_MODEL.openai)
   // Hardcoded localhost; advanced users can set OLLAMA_API_BASE in their shell.
@@ -146,7 +192,10 @@ function App(): React.JSX.Element {
       prompt: mode === 'llm' ? prompt : undefined,
       provider: mode === 'llm' ? provider : undefined,
       model: mode === 'llm' ? model.trim() || undefined : undefined,
-      ollamaHost: undefined
+      ollamaHost: undefined,
+      selectedScene: mode === 'llm' ? selectedSceneId ?? undefined : undefined,
+      selectedCharacters:
+        mode === 'llm' && selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -373,6 +422,18 @@ function App(): React.JSX.Element {
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start">
+        <div className="flex flex-col gap-4">
+        <AssetsPanel
+          registry={registry}
+          selectedSceneId={selectedSceneId}
+          selectedCharacterIds={selectedCharacterIds}
+          onSelectScene={setSelectedSceneId}
+          onToggleCharacter={onToggleCharacter}
+          onAddScene={() => setUploadKind('scene')}
+          onAddCharacter={() => setUploadKind('character')}
+          onRefresh={refreshRegistry}
+          disabled={isRunning}
+        />
         <section className="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm">
@@ -549,6 +610,7 @@ function App(): React.JSX.Element {
             {isRunning ? 'Rendering…' : 'Render'}
           </button>
         </section>
+        </div>
 
         <section className="flex flex-col gap-2">
           {state.status === 'idle' && (
@@ -653,6 +715,13 @@ function App(): React.JSX.Element {
           if (response.ok) return response.prompt
           throw new Error(response.error)
         }}
+      />
+
+      <AssetUploadModal
+        open={uploadKind !== null}
+        kind={uploadKind ?? 'scene'}
+        onClose={() => setUploadKind(null)}
+        onSubmitted={onUploadSubmitted}
       />
     </div>
   )
