@@ -72,6 +72,13 @@ def execute_timeline(
     executed: list[dict] = []
     skipped: list[dict] = []
 
+    # Per-shot camera binding. Each shot has a `camera` field that names the
+    # default camera for its time window. We inject an implicit camera_cut at
+    # each shot's start so multi-shot timelines actually switch cameras at
+    # the boundary. Skipped when the user already placed an explicit
+    # camera_cut at that exact frame.
+    timeline = _inject_per_shot_cameras(timeline)
+
     # Implicit idle fill — for each character + each shot, walk the existing
     # body-pose actions sorted by start time and inject `idle` for any
     # uncovered time. Without this, gaps render as Mixamo's T-pose, which is
@@ -137,6 +144,59 @@ def execute_timeline(
             )
 
     return {"executed": executed, "skipped": skipped, "fps": fps}
+
+
+def _inject_per_shot_cameras(timeline: dict) -> dict:
+    """Inject an implicit camera_cut at the start of every shot.
+
+    Each Shot in the schema has a `camera` field naming the default camera
+    for its duration. Without an explicit camera_cut action, the executor
+    would leave the scene's load-time camera bound across shot boundaries.
+    Injecting a camera_cut at shot.start ensures multi-shot timelines switch
+    cameras correctly. We skip the injection when the user has already
+    placed an explicit camera_cut at the same frame (so manual control wins).
+    """
+    if not isinstance(timeline, dict):
+        return timeline
+    shots = timeline.get("shots", [])
+    if not isinstance(shots, list) or not shots:
+        return timeline
+
+    new_shots: list[dict] = []
+    for shot in shots:
+        if not isinstance(shot, dict):
+            new_shots.append(shot)
+            continue
+        camera = shot.get("camera")
+        actions = list(shot.get("actions", []))
+        if camera:
+            shot_start = float(shot.get("start", 0))
+            has_explicit = any(
+                a.get("type") == "camera_cut"
+                and abs(float(a.get("start", 0)) - shot_start) < 0.05
+                for a in actions
+            )
+            if not has_explicit:
+                actions.insert(
+                    0,
+                    {
+                        "id": f"_shot_camera_{shot.get('id', 'shot')}",
+                        "type": "camera_cut",
+                        "camera": camera,
+                        "start": shot_start,
+                        # camera_cut places a marker at start_frame; end is
+                        # unused by the action but must be > start to satisfy
+                        # any validator that sees it later.
+                        "end": shot_start + 0.1,
+                    },
+                )
+        new_shot = dict(shot)
+        new_shot["actions"] = actions
+        new_shots.append(new_shot)
+
+    out = dict(timeline)
+    out["shots"] = new_shots
+    return out
 
 
 # Action types that occupy the character's body (their pose). When two of

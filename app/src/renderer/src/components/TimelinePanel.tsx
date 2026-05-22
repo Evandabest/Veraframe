@@ -39,6 +39,7 @@ interface TimelineShot {
   id: string
   start: number
   end: number
+  camera: string
   actions: TimelineAction[]
 }
 
@@ -492,6 +493,26 @@ export function TimelinePanel({
                 )
               })}
             </div>
+
+            {/* Shot boundaries — dashed vertical lines at each shot's start
+                (except the first, which is the timeline's left edge). Helps
+                users see where one shot ends and the next begins on a
+                multi-shot project. */}
+            {(tl.shots ?? []).slice(1).map((shot) => {
+              const leftPct = (shot.start / displayDuration) * 100
+              return (
+                <div
+                  key={`shot-boundary-${shot.id}`}
+                  className="pointer-events-none absolute inset-y-0 z-10 w-px"
+                  style={{
+                    left: `${leftPct}%`,
+                    backgroundImage:
+                      'repeating-linear-gradient(to bottom, rgba(250,204,21,0.6) 0 4px, transparent 4px 8px)'
+                  }}
+                  title={`shot ${shot.id} (${shot.start.toFixed(1)}s) — camera: ${shot.camera}`}
+                />
+              )
+            })}
 
             {/* Lane rows — no per-row + buttons here; they live in the
                 rightmost gutter column so they never overflow the canvas. */}
