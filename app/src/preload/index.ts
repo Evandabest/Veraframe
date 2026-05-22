@@ -174,6 +174,13 @@ export interface RenderStatusEvent {
   detail?: string
 }
 
+export type DaemonState = 'starting' | 'ready' | 'crashed' | 'restarting' | 'stopped'
+
+export interface DaemonStatusEvent {
+  state: DaemonState
+  detail?: string
+}
+
 export interface GenerateActionRequest {
   prompt: string
   scene: string
@@ -239,6 +246,18 @@ const veraframe = {
     ipcRenderer.on('render-status', listener)
     return () => {
       ipcRenderer.off('render-status', listener)
+    }
+  },
+  getDaemonState: (): Promise<{ state: DaemonState; port?: number }> =>
+    ipcRenderer.invoke('getDaemonState'),
+  restartDaemon: (): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('restartDaemon'),
+  onDaemonStatus: (callback: (event: DaemonStatusEvent) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: DaemonStatusEvent): void =>
+      callback(payload)
+    ipcRenderer.on('daemon-status', listener)
+    return () => {
+      ipcRenderer.off('daemon-status', listener)
     }
   }
 }

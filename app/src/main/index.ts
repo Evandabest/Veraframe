@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto'
 import { join, resolve as resolvePath } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { startDaemon, type DaemonHandle } from './daemon'
+import { startDaemon, type DaemonHandle, type DaemonState } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
 // buildMockTimeline removed — mock mode now loads a pre-rendered fixture
 // from assets/fixtures/ instead of building + rendering a canned timeline.
@@ -199,16 +199,49 @@ app.whenReady().then(async () => {
   }
 
   // Spawn the long-lived Blender daemon. If it fails, the app still opens —
-  // the render handlers will surface the error to the renderer.
+  // the render handlers will surface the error to the renderer. The handle
+  // auto-restarts on unexpected exit; we broadcast state changes via the
+  // 'daemon-status' IPC channel so the UI can show a banner.
+  const broadcastDaemonStatus = (state: DaemonState, detail?: string): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('daemon-status', { state, detail })
+    }
+  }
   try {
     daemonHandle = await startDaemon()
     console.log(`Blender daemon ready on port ${daemonHandle.port}`)
+    daemonHandle.onStateChange((state, detail) => broadcastDaemonStatus(state, detail))
   } catch (err) {
     console.error('Blender daemon failed to start:', err)
+    broadcastDaemonStatus('crashed', (err as Error).message)
   }
+
+  ipcMain.handle('getDaemonState', () => ({
+    state: daemonHandle?.getState() ?? 'stopped',
+    port: daemonHandle?.port
+  }))
+
+  ipcMain.handle(
+    'restartDaemon',
+    async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!daemonHandle) return { ok: false, error: 'daemon handle missing' }
+      try {
+        await daemonHandle.restart()
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
 
   ipcMain.handle('render', async (event, request: RenderRequest): Promise<RenderResponse> => {
     if (!daemonHandle) return { ok: false, error: 'Blender daemon is not running' }
+    if (daemonHandle.getState() !== 'ready') {
+      return {
+        ok: false,
+        error: `Blender daemon is ${daemonHandle.getState()}; wait for it to come back online`
+      }
+    }
     if (!assets) return { ok: false, error: 'asset registry not loaded' }
     const sendProgress = (step: string, detail?: string): void => {
       event.sender.send('render-status', { step, detail })

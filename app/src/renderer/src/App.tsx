@@ -6,7 +6,7 @@ import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
 import { EditSceneModal } from './components/EditSceneModal'
 import { AddCharacterModal } from './components/AddCharacterModal'
-import type { RegistrySummary } from '../../preload'
+import type { RegistrySummary, DaemonState } from '../../preload'
 
 interface TimelineAction {
   id: string
@@ -338,6 +338,19 @@ function App(): React.JSX.Element {
   // Reference renderTick so the dependency is "used" — re-renders are what
   // drives the visible counter forward.
   void renderTick
+
+  // Daemon health banner. Main pushes status events whenever the daemon
+  // crashes / restarts; we surface a banner near the header so the user
+  // knows why a render might be unavailable.
+  const [daemonStatus, setDaemonStatus] = useState<{ state: DaemonState; detail?: string }>({
+    state: 'starting'
+  })
+  useEffect(() => {
+    window.veraframe.getDaemonState().then(({ state }) => {
+      setDaemonStatus({ state })
+    })
+    return window.veraframe.onDaemonStatus((event) => setDaemonStatus(event))
+  }, [])
 
   // Subscribe to per-step progress events from main; reset when a new render
   // starts.
@@ -691,6 +704,38 @@ function App(): React.JSX.Element {
             )}
           </div>
         </header>
+
+        {daemonStatus.state !== 'ready' && (
+          <div
+            className={`rounded-md border px-3 py-2 text-xs ${
+              daemonStatus.state === 'crashed'
+                ? 'border-red-500/60 bg-red-500/10 text-red-200'
+                : 'border-amber-500/60 bg-amber-500/10 text-amber-200'
+            }`}
+          >
+            <span className="font-semibold">Blender daemon: {daemonStatus.state}</span>
+            {daemonStatus.detail && (
+              <span className="ml-2 text-neutral-400">{daemonStatus.detail}</span>
+            )}
+            {daemonStatus.state === 'crashed' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const resp = await window.veraframe.restartDaemon()
+                  if (!resp.ok) window.alert(`Restart failed: ${resp.error}`)
+                }}
+                className="ml-3 rounded border border-red-500/60 px-2 py-0.5 text-[11px] text-red-100 hover:bg-red-500/25"
+              >
+                Restart now
+              </button>
+            )}
+            {daemonStatus.state !== 'crashed' && (
+              <span className="ml-2 text-neutral-400">
+                — Renders are paused until the daemon is ready.
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start">
         <div className="flex flex-col gap-4">

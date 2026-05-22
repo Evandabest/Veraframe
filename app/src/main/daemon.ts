@@ -13,6 +13,8 @@ export class DaemonError extends Error {
   }
 }
 
+export type DaemonState = 'starting' | 'ready' | 'crashed' | 'restarting' | 'stopped'
+
 /**
  * Resolve the Blender executable, mirroring planner.daemon_runner.find_blender:
  *   1. $BLENDER_PATH if set and points at an existing file
@@ -60,8 +62,15 @@ export function pickFreePort(): Promise<number> {
 }
 
 export interface DaemonHandle {
+  /** Live port the daemon is listening on (may change across restarts). */
   readonly port: number
+  /** Current health state. */
+  getState(): DaemonState
+  /** Subscribe to state changes; returns an unsubscribe function. */
+  onStateChange(listener: (state: DaemonState, detail?: string) => void): () => void
   call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
+  /** Force a restart (e.g., user pressed a "Restart daemon" button). */
+  restart(): Promise<void>
   shutdown(): Promise<void>
 }
 
@@ -74,68 +83,133 @@ export interface StartDaemonOptions {
   daemonScript?: string
   /** Max time to wait for the daemon to accept connections. */
   startupTimeoutMs?: number
+  /**
+   * Auto-restart on unexpected exit. When false the handle transitions to
+   * 'crashed' and stays there until the caller invokes restart(). Default: true.
+   */
+  autoRestart?: boolean
 }
 
 /**
  * Spawn the Blender daemon and resolve with a handle once it's accepting
- * connections. The handle owns the child process; `shutdown()` terminates it.
+ * connections. The handle owns the child process and auto-restarts on
+ * unexpected exit (Blender crash, OOM kill, etc.) unless `autoRestart: false`.
  */
 export async function startDaemon(options: StartDaemonOptions = {}): Promise<DaemonHandle> {
-  const blender = options.blenderPath ?? findBlender()
-  const port = options.port ?? (await pickFreePort())
-  const startupTimeoutMs = options.startupTimeoutMs ?? 60_000
-  // Resolve daemon.py relative to the repo root, which sits two levels up from
-  // the bundled main process at <repo>/app/out/main/index.js (Electron-vite
-  // build output). During `electron-vite dev` the dirname is the source
-  // location instead. We let callers override via options.daemonScript.
+  const blenderPath = options.blenderPath ?? findBlender()
   const daemonScript = options.daemonScript ?? resolveDaemonScript()
+  const startupTimeoutMs = options.startupTimeoutMs ?? 60_000
+  const autoRestart = options.autoRestart ?? true
 
-  const child = spawn(
-    blender,
-    ['--background', '--python', daemonScript, '--', '--port', String(port)],
-    { stdio: ['ignore', 'pipe', 'pipe'] }
-  )
-
-  // Forward Blender's stdout/stderr to main's console, line-buffered with a
-  // [blender] prefix so handler tracebacks and daemon prints are visible
-  // alongside Electron's own logs.
-  if (child.stdout) forwardLines(child.stdout, '[blender]', process.stdout)
-  if (child.stderr) forwardLines(child.stderr, '[blender]', process.stderr)
-
-  type ExitInfo = { code: number | null; signal: NodeJS.Signals | null }
-  let earlyExit: ExitInfo | null = null
-  child.once('exit', (code, signal) => {
-    earlyExit = { code, signal }
-  })
-
-  const deadline = Date.now() + startupTimeoutMs
-  const readEarlyExit = (): ExitInfo | null => earlyExit
-  while (Date.now() < deadline) {
-    const exited = readEarlyExit()
-    if (exited) {
-      throw new DaemonError(
-        `Blender exited before daemon was ready (code=${exited.code} signal=${exited.signal})`
-      )
-    }
-    if (await ping(port)) {
-      return makeHandle(port, child)
-    }
-    await delay(250)
+  const listeners = new Set<(state: DaemonState, detail?: string) => void>()
+  let state: DaemonState = 'starting'
+  const setState = (next: DaemonState, detail?: string): void => {
+    if (state === next) return
+    state = next
+    console.log(`[daemon] state → ${next}${detail ? ` (${detail})` : ''}`)
+    for (const cb of listeners) cb(next, detail)
   }
 
-  child.kill('SIGTERM')
-  throw new DaemonError(`daemon did not become ready within ${startupTimeoutMs}ms`)
-}
-
-function makeHandle(port: number, child: ChildProcess): DaemonHandle {
+  let child: ChildProcess
+  let port: number
   let shuttingDown = false
+
+  const launch = async (): Promise<void> => {
+    port = options.port ?? (await pickFreePort())
+    child = spawn(
+      blenderPath,
+      ['--background', '--python', daemonScript, '--', '--port', String(port)],
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    )
+    if (child.stdout) forwardLines(child.stdout, '[blender]', process.stdout)
+    if (child.stderr) forwardLines(child.stderr, '[blender]', process.stderr)
+
+    interface ExitInfo {
+      code: number | null
+      signal: NodeJS.Signals | null
+    }
+    // Use a single-element array so TS doesn't aggressively narrow the
+    // closure-captured `null` literal — we mutate from the listener.
+    const earlyExit: [ExitInfo | null] = [null]
+    const onEarlyExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+      earlyExit[0] = { code, signal }
+    }
+    child.once('exit', onEarlyExit)
+
+    const deadline = Date.now() + startupTimeoutMs
+    while (Date.now() < deadline) {
+      const exit = earlyExit[0]
+      if (exit) {
+        throw new DaemonError(
+          `Blender exited before daemon was ready (code=${exit.code} signal=${exit.signal})`
+        )
+      }
+      if (await ping(port)) {
+        // Swap the early-exit listener for the long-lived crash listener.
+        child.removeListener('exit', onEarlyExit)
+        child.once('exit', (code, signal) => {
+          if (shuttingDown) {
+            setState('stopped')
+            return
+          }
+          const detail = `code=${code} signal=${signal}`
+          setState('crashed', detail)
+          if (autoRestart) {
+            // Restart asynchronously with a short backoff so we don't busy-loop
+            // on persistent failures.
+            setTimeout(() => {
+              void restartInternal().catch((err) => {
+                console.error('[daemon] restart failed:', err)
+                setState('crashed', (err as Error).message)
+              })
+            }, 2_000)
+          }
+        })
+        setState('ready', `port=${port}`)
+        return
+      }
+      await delay(250)
+    }
+    child.kill('SIGTERM')
+    throw new DaemonError(`daemon did not become ready within ${startupTimeoutMs}ms`)
+  }
+
+  const restartInternal = async (): Promise<void> => {
+    if (shuttingDown) return
+    setState('restarting')
+    await launch()
+  }
+
+  await launch()
+
   return {
-    port,
+    get port(): number {
+      return port
+    },
+    getState: () => state,
+    onStateChange(listener) {
+      listeners.add(listener)
+      // Fire the current state immediately so subscribers don't miss it.
+      listener(state)
+      return () => listeners.delete(listener)
+    },
     async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+      if (state !== 'ready') {
+        throw new DaemonError(`daemon is ${state}, not ready`)
+      }
       return rpcCall<T>(port, method, params)
     },
+    async restart(): Promise<void> {
+      if (shuttingDown) return
+      if (child && child.exitCode === null) {
+        child.kill('SIGTERM')
+        await Promise.race([waitForExit(child), delay(5_000)])
+        if (child.exitCode === null) child.kill('SIGKILL')
+      }
+      await restartInternal()
+    },
     async shutdown(): Promise<void> {
-      if (shuttingDown || child.exitCode !== null) return
+      if (shuttingDown || (child && child.exitCode !== null)) return
       shuttingDown = true
       child.kill('SIGTERM')
       await Promise.race([waitForExit(child), delay(5_000)])
@@ -143,6 +217,7 @@ function makeHandle(port: number, child: ChildProcess): DaemonHandle {
         child.kill('SIGKILL')
         await waitForExit(child)
       }
+      setState('stopped')
     }
   }
 }
