@@ -30,6 +30,16 @@ def main(argv: list[str] | None = None) -> int:
         default="assets",
         help="Asset registry directory (default: ./assets).",
     )
+    parser.add_argument(
+        "--selected-scene",
+        default=None,
+        help="If set, hard-constrain the LLM to use this scene id.",
+    )
+    parser.add_argument(
+        "--selected-characters",
+        default=None,
+        help="Comma-separated list of character preset ids; if set, restricts the LLM to these.",
+    )
     args = parser.parse_args(argv)
 
     from planner.registry import Registry
@@ -43,7 +53,40 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
 
-    project = generate_validated_timeline(args.prompt, registry)
+    # Prepend hard constraints to the user prompt. We do this in the user
+    # message (not the system prompt) because the validator's retry loop
+    # rewrites the user prompt with feedback on each attempt — putting the
+    # constraints there ensures they survive across retries.
+    prompt = args.prompt
+    constraint_lines: list[str] = []
+    if args.selected_scene:
+        if args.selected_scene not in registry.scenes:
+            print(
+                f"warning: --selected-scene='{args.selected_scene}' is not in the registry; "
+                f"available: {', '.join(registry.scenes.keys())}",
+                file=sys.stderr,
+            )
+        constraint_lines.append(
+            f"# Hard constraint\n"
+            f"You MUST use the scene with id `{args.selected_scene}`. Do not pick any other scene."
+        )
+    if args.selected_characters:
+        char_ids = [c.strip() for c in args.selected_characters.split(",") if c.strip()]
+        invalid = [c for c in char_ids if c not in registry.characters]
+        if invalid:
+            print(
+                f"warning: --selected-characters contains unknown ids: {invalid}; "
+                f"available: {', '.join(registry.characters.keys())}",
+                file=sys.stderr,
+            )
+        constraint_lines.append(
+            f"You MUST use ONLY these character presets when declaring characters: "
+            f"{', '.join(char_ids)}. Do not introduce any other character preset."
+        )
+    if constraint_lines:
+        prompt = "\n\n".join(constraint_lines) + "\n\n# User instruction\n" + args.prompt
+
+    project = generate_validated_timeline(prompt, registry)
     json.dump(project.model_dump(mode="json"), sys.stdout)
     sys.stdout.write("\n")
     return 0
