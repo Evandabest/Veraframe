@@ -27,10 +27,16 @@ export interface IncrementalRender {
   operation: 'splice' | 'append'
 }
 
+export type RenderQuality = 'draft' | 'hifi'
+
 export interface RenderOptions {
   fps?: number
   onProgress?: (event: RenderProgress) => void
   incremental?: IncrementalRender
+  /** Render quality preset. 'draft' = small + low-sample (fast iteration);
+   *  'hifi' = full resolution + samples (default). For incremental renders,
+   *  the splice/append seam quality is best when this matches the base. */
+  quality?: RenderQuality
 }
 
 export interface RenderResult {
@@ -57,6 +63,7 @@ export async function runTimeline(
   options: RenderOptions = {}
 ): Promise<RenderResult> {
   const fps = options.fps ?? 24
+  const quality: RenderQuality = options.quality ?? 'hifi'
   const emit = options.onProgress ?? ((): void => {})
 
   const sceneId = String(timeline.scene)
@@ -129,7 +136,8 @@ export async function runTimeline(
       start_frame: startFrame,
       end_frame: endFrame,
       output_path: slicePath,
-      fps
+      fps,
+      quality
     })
 
     emit({ step: 'merge', detail: operation })
@@ -149,12 +157,13 @@ export async function runTimeline(
     await unlink(slicePath).catch(() => {})
   } else {
     const endFrame = Math.round(durationSec * fps)
-    emit({ step: 'render', detail: `${endFrame + 1} frame(s)` })
+    emit({ step: 'render', detail: `${endFrame + 1} frame(s) (${quality})` })
     await daemon.call('render', {
       start_frame: 0,
       end_frame: endFrame,
       output_path: outputPath,
-      fps
+      fps,
+      quality
     })
   }
 
