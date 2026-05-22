@@ -18,10 +18,14 @@ export type RenderResponse =
     }
   | { ok: false; error: string }
 
+export type SaveRenderResponse = { ok: true; path: string } | { ok: false; error: string }
+
 /** API surface exposed on `window.veraframe` for the React renderer. */
 const veraframe = {
   render: (request: RenderRequest): Promise<RenderResponse> =>
-    ipcRenderer.invoke('render', request)
+    ipcRenderer.invoke('render', request),
+  saveRender: (renderId: string): Promise<SaveRenderResponse> =>
+    ipcRenderer.invoke('saveRender', renderId)
 }
 
 if (process.contextIsolated) {

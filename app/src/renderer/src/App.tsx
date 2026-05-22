@@ -3,7 +3,7 @@ import { useState } from 'react'
 type RenderState =
   | { status: 'idle' }
   | { status: 'running' }
-  | { status: 'success'; videoUrl: string; durationSec: number }
+  | { status: 'success'; renderId: string; videoUrl: string; durationSec: number }
   | { status: 'error'; message: string }
 
 function App(): React.JSX.Element {
@@ -21,11 +21,23 @@ function App(): React.JSX.Element {
     if (response.ok) {
       setState({
         status: 'success',
+        renderId: response.renderId,
         videoUrl: response.videoUrl,
         durationSec: response.durationSec
       })
     } else {
       setState({ status: 'error', message: response.error })
+    }
+  }
+
+  const [saveNote, setSaveNote] = useState<string | null>(null)
+  const onSave = async (renderId: string): Promise<void> => {
+    setSaveNote(null)
+    const response = await window.veraframe.saveRender(renderId)
+    if (response.ok) {
+      setSaveNote(`Saved to ${response.path}`)
+    } else if (response.error !== 'save canceled') {
+      setSaveNote(`Save failed: ${response.error}`)
     }
   }
 
@@ -106,9 +118,21 @@ function App(): React.JSX.Element {
           )}
           {state.status === 'success' && (
             <>
-              <p className="text-sm text-neutral-400">
-                Rendered {state.durationSec.toFixed(1)}s
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-neutral-400">
+                  Rendered {state.durationSec.toFixed(1)}s
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onSave(state.renderId)}
+                  className="rounded-md border border-neutral-700 px-3 py-1 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
+                >
+                  Save Video…
+                </button>
+              </div>
+              {saveNote && (
+                <p className="text-xs text-neutral-500 break-all">{saveNote}</p>
+              )}
               <video
                 key={state.videoUrl}
                 src={state.videoUrl}

@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net, dialog } from 'electron'
+import { copyFile } from 'fs/promises'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -152,6 +153,28 @@ app.whenReady().then(async () => {
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'saveRender',
+    async (_event, renderId: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+      const source = renderedVideos.get(renderId)
+      if (!source) return { ok: false, error: `unknown renderId: ${renderId}` }
+      const result = await dialog.showSaveDialog({
+        title: 'Save rendered video',
+        defaultPath: `veraframe-${renderId.slice(0, 8)}.mp4`,
+        filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
+      })
+      if (result.canceled || !result.filePath) {
+        return { ok: false, error: 'save canceled' }
+      }
+      try {
+        await copyFile(source, result.filePath)
+        return { ok: true, path: result.filePath }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
 
   createWindow()
 
