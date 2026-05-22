@@ -45,43 +45,68 @@ def main(argv: list[str] | None = None) -> int:
     from planner.registry import Registry
     from planner.validator import generate_validated_timeline
 
-    registry = Registry.load(Path(args.assets).resolve())
+    full_registry = Registry.load(Path(args.assets).resolve())
     print(
-        f"registry: {len(registry.scenes)} scene(s), "
-        f"{len(registry.characters)} character(s), "
-        f"{len(registry.animations)} animation(s)",
+        f"registry: {len(full_registry.scenes)} scene(s), "
+        f"{len(full_registry.characters)} character(s), "
+        f"{len(full_registry.animations)} animation(s)",
         file=sys.stderr,
     )
 
-    # Prepend hard constraints to the user prompt. We do this in the user
-    # message (not the system prompt) because the validator's retry loop
-    # rewrites the user prompt with feedback on each attempt — putting the
-    # constraints there ensures they survive across retries.
-    prompt = args.prompt
-    constraint_lines: list[str] = []
+    # Filter the registry to just the user-selected scene + characters so the
+    # system-prompt "Available …" section only lists what's allowed. The
+    # validator also uses this filtered registry, so any timeline that
+    # references something outside the selection fails semantic validation
+    # and the retry loop kicks in — turning the soft prompt-level
+    # constraint into a hard enforcement.
+    scene_filter: set[str] | None = None
     if args.selected_scene:
-        if args.selected_scene not in registry.scenes:
+        if args.selected_scene not in full_registry.scenes:
             print(
                 f"warning: --selected-scene='{args.selected_scene}' is not in the registry; "
-                f"available: {', '.join(registry.scenes.keys())}",
+                f"available: {', '.join(full_registry.scenes.keys())}",
                 file=sys.stderr,
             )
-        constraint_lines.append(
-            f"# Hard constraint\n"
-            f"You MUST use the scene with id `{args.selected_scene}`. Do not pick any other scene."
-        )
+        else:
+            scene_filter = {args.selected_scene}
+    character_filter: set[str] | None = None
     if args.selected_characters:
         char_ids = [c.strip() for c in args.selected_characters.split(",") if c.strip()]
-        invalid = [c for c in char_ids if c not in registry.characters]
+        invalid = [c for c in char_ids if c not in full_registry.characters]
         if invalid:
             print(
                 f"warning: --selected-characters contains unknown ids: {invalid}; "
-                f"available: {', '.join(registry.characters.keys())}",
+                f"available: {', '.join(full_registry.characters.keys())}",
                 file=sys.stderr,
             )
+        valid = [c for c in char_ids if c in full_registry.characters]
+        if valid:
+            character_filter = set(valid)
+
+    registry = full_registry.filtered(scene_filter, character_filter)
+    if scene_filter or character_filter:
+        print(
+            f"filtered registry: {len(registry.scenes)} scene(s), "
+            f"{len(registry.characters)} character(s)",
+            file=sys.stderr,
+        )
+
+    # The filtered registry alone makes the catalog tight. We still add a
+    # belt-and-suspenders constraint line so the model sees an explicit
+    # instruction (helpful for small Ollama models that occasionally
+    # hallucinate ids that aren't in the catalog).
+    prompt = args.prompt
+    constraint_lines: list[str] = []
+    if scene_filter:
+        constraint_lines.append(
+            f"# Hard constraint\n"
+            f"You MUST use the scene with id `{next(iter(scene_filter))}`. "
+            f"It is the only scene listed in the catalog above."
+        )
+    if character_filter:
         constraint_lines.append(
             f"You MUST use ONLY these character presets when declaring characters: "
-            f"{', '.join(char_ids)}. Do not introduce any other character preset."
+            f"{', '.join(sorted(character_filter))}. They are the only presets in the catalog."
         )
     if constraint_lines:
         prompt = "\n\n".join(constraint_lines) + "\n\n# User instruction\n" + args.prompt

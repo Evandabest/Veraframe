@@ -264,6 +264,34 @@ class Registry(BaseModel):
     animations: dict[str, AnimationSpec]
     actions: tuple[ActionSpec, ...] = DEFAULT_ACTIONS
 
+    def filtered(
+        self,
+        scene_ids: set[str] | None = None,
+        character_ids: set[str] | None = None,
+    ) -> "Registry":
+        """Return a copy that only exposes the requested scenes / characters.
+
+        Used to tighten the LLM's view to the user's UI selection so the
+        system prompt's "Available …" sections only list what the user
+        picked. `None` (default) means "keep everything for that group". An
+        empty set is treated like `None` (no constraint) for symmetry with
+        the UI default where "no selection" means "anything goes".
+        """
+        scenes = self.scenes
+        if scene_ids:
+            scenes = {sid: spec for sid, spec in self.scenes.items() if sid in scene_ids}
+        characters = self.characters
+        if character_ids:
+            characters = {
+                cid: spec for cid, spec in self.characters.items() if cid in character_ids
+            }
+        return Registry(
+            scenes=scenes,
+            characters=characters,
+            animations=self.animations,
+            actions=self.actions,
+        )
+
     @classmethod
     def load(cls, assets_dir: Path) -> "Registry":
         """Scan an assets directory and build a Registry from its manifests.
