@@ -160,6 +160,19 @@ function App(): React.JSX.Element {
   // drives the visible counter forward.
   void renderTick
 
+  // Subscribe to per-step progress events from main; reset when a new render
+  // starts.
+  const [currentStep, setCurrentStep] = useState<{ step: string; detail?: string } | null>(null)
+  useEffect(() => {
+    if (state.status === 'running') setCurrentStep(null)
+  }, [state.status])
+  useEffect(() => {
+    const unsubscribe = window.veraframe.onRenderStatus((event) => {
+      setCurrentStep(event)
+    })
+    return unsubscribe
+  }, [])
+
   const [saveNote, setSaveNote] = useState<string | null>(null)
   const onSave = async (renderId: string): Promise<void> => {
     setSaveNote(null)
@@ -372,13 +385,23 @@ function App(): React.JSX.Element {
             <p className="text-sm text-neutral-500">No render yet.</p>
           )}
           {state.status === 'running' && (
-            <div className="flex items-baseline gap-3">
-              <p className="text-sm text-neutral-400">
-                Rendering — this can take a minute or two on the first call (Blender startup).
-              </p>
-              <span className="font-mono text-sm tabular-nums text-neutral-300">
-                {formatElapsed(liveElapsedSec)}
-              </span>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline gap-3">
+                <p className="text-sm text-neutral-400">
+                  Rendering — this can take a minute or two on the first call (Blender startup).
+                </p>
+                <span className="font-mono text-sm tabular-nums text-neutral-300">
+                  {formatElapsed(liveElapsedSec)}
+                </span>
+              </div>
+              {currentStep && (
+                <p className="font-mono text-xs text-neutral-500">
+                  <span className="text-neutral-300">{STEP_LABEL[currentStep.step] ?? currentStep.step}</span>
+                  {currentStep.detail && (
+                    <span className="text-neutral-500"> · {currentStep.detail}</span>
+                  )}
+                </p>
+              )}
             </div>
           )}
           {state.status === 'error' && (
@@ -430,6 +453,16 @@ function App(): React.JSX.Element {
       </div>
     </div>
   )
+}
+
+const STEP_LABEL: Record<string, string> = {
+  llm: 'Calling LLM',
+  build_mock_timeline: 'Building mock timeline',
+  reset: 'Resetting Blender scene',
+  load_scene: 'Loading scene',
+  load_character: 'Loading character',
+  execute_timeline: 'Executing actions',
+  render: 'Rendering frames'
 }
 
 function formatElapsed(totalSec: number): string {

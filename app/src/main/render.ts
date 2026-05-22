@@ -4,8 +4,14 @@ import { resolve as resolvePath } from 'path'
 import type { DaemonHandle } from './daemon'
 import type { AssetRegistry } from './assets'
 
+export interface RenderProgress {
+  step: string
+  detail?: string
+}
+
 export interface RenderOptions {
   fps?: number
+  onProgress?: (event: RenderProgress) => void
 }
 
 export interface RenderResult {
@@ -32,6 +38,7 @@ export async function runTimeline(
   options: RenderOptions = {}
 ): Promise<RenderResult> {
   const fps = options.fps ?? 24
+  const emit = options.onProgress ?? ((): void => {})
 
   const sceneId = String(timeline.scene)
   const scene = assets.scenes[sceneId]
@@ -50,13 +57,21 @@ export async function runTimeline(
     assetPaths[id] = anim.fbxPath
   }
 
+  emit({ step: 'reset' })
   await daemon.call('reset')
+
+  emit({ step: 'load_scene', detail: sceneId })
   await daemon.call('load_scene', { blend_path: scene.blendPath })
 
   const characters = (timeline.characters ?? []) as Array<Record<string, unknown>>
-  for (const character of characters) {
+  for (let i = 0; i < characters.length; i += 1) {
+    const character = characters[i]
     const preset = assets.characters[String(character.preset)]
     if (!preset) throw new Error(`character preset '${character.preset}' not in registry`)
+    emit({
+      step: 'load_character',
+      detail: `${character.id} (${i + 1}/${characters.length})`
+    })
     await daemon.call('load_character', {
       fbx_path: preset.meshPath,
       spawn_point: String(character.spawn),
@@ -64,6 +79,7 @@ export async function runTimeline(
     })
   }
 
+  emit({ step: 'execute_timeline' })
   const execResult = (await daemon.call('execute_timeline', {
     timeline,
     asset_paths: assetPaths,
@@ -71,6 +87,7 @@ export async function runTimeline(
   })) as { executed: unknown[]; skipped: unknown[] }
 
   const endFrame = Math.round(durationSec * fps)
+  emit({ step: 'render', detail: `${endFrame + 1} frame(s)` })
   await daemon.call('render', {
     start_frame: 0,
     end_frame: endFrame,

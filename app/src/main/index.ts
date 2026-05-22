@@ -183,24 +183,31 @@ app.whenReady().then(async () => {
     console.error('Blender daemon failed to start:', err)
   }
 
-  ipcMain.handle('render', async (_event, request: RenderRequest): Promise<RenderResponse> => {
+  ipcMain.handle('render', async (event, request: RenderRequest): Promise<RenderResponse> => {
     if (!daemonHandle) return { ok: false, error: 'Blender daemon is not running' }
     if (!assets) return { ok: false, error: 'asset registry not loaded' }
+    const sendProgress = (step: string, detail?: string): void => {
+      event.sender.send('render-status', { step, detail })
+    }
     try {
       let timeline: Record<string, unknown>
       if (request.mode === 'mock') {
+        sendProgress('build_mock_timeline')
         timeline = buildMockTimeline(assets, request.durationSec ?? 8)
       } else {
         if (!request.prompt || !request.prompt.trim()) {
           return { ok: false, error: 'LLM mode requires a prompt' }
         }
+        sendProgress('llm', `${request.provider ?? 'openai'}:${request.model ?? '(default)'}`)
         timeline = await runPlanner(request.prompt, resolveRepoRoot(), assets.assetsDir, {
           provider: request.provider,
           model: request.model,
           ollamaHost: request.ollamaHost
         })
       }
-      const result: RenderResult = await runTimeline(daemonHandle, assets, timeline)
+      const result: RenderResult = await runTimeline(daemonHandle, assets, timeline, {
+        onProgress: ({ step, detail }) => sendProgress(step, detail)
+      })
       renderedVideos.set(result.renderId, result.videoPath)
       return {
         ok: true,

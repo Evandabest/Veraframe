@@ -44,6 +44,11 @@ export interface EnhancePromptRequest {
   ollamaHost?: string
 }
 
+export interface RenderStatusEvent {
+  step: string
+  detail?: string
+}
+
 /** API surface exposed on `window.veraframe` for the React renderer. */
 const veraframe = {
   render: (request: RenderRequest): Promise<RenderResponse> =>
@@ -53,7 +58,15 @@ const veraframe = {
   listOllamaModels: (host: string): Promise<OllamaModelsResponse> =>
     ipcRenderer.invoke('listOllamaModels', host),
   enhancePrompt: (request: EnhancePromptRequest): Promise<EnhancePromptResponse> =>
-    ipcRenderer.invoke('enhancePrompt', request)
+    ipcRenderer.invoke('enhancePrompt', request),
+  onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
+      callback(payload)
+    ipcRenderer.on('render-status', listener)
+    return () => {
+      ipcRenderer.off('render-status', listener)
+    }
+  }
 }
 
 if (process.contextIsolated) {
