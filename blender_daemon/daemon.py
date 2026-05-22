@@ -25,6 +25,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from actions import idle as idle_action  # noqa: E402
+from actions import walk_to as walk_to_action  # noqa: E402
 from blender_daemon.action_executor import execute_timeline  # noqa: E402
 from blender_daemon.character_loader import load_character  # noqa: E402
 from blender_daemon.render_manager import render  # noqa: E402
@@ -73,6 +75,11 @@ def reset() -> dict:
             if collection is None:
                 continue
             bpy.data.batch_remove(list(collection))
+    # Drop Python-side caches that hold references to the now-freed Actions.
+    # Without this, the next walk_to/idle dispatch returns a dead StructRNA and
+    # raises "StructRNA of type Action has been removed".
+    idle_action.clear_cache()
+    walk_to_action.clear_cache()
     return {"ok": True}
 
 

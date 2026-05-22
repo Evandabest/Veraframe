@@ -240,3 +240,33 @@ def test_real_sequential_walks_start_from_previous_target() -> None:
     assert by_id["a1"]["end_location"] == [0.0, -3.0, 0.0]
     assert by_id["a2"]["start_location"] == [0.0, -3.0, 0.0]
     assert by_id["a2"]["end_location"] == [0.0, 0.0, 0.0]
+
+
+@needs_blender
+def test_real_reset_then_walk_does_not_crash_on_cached_action() -> None:
+    """Regression: a `reset` must invalidate the action cache so the next
+    walk_to dispatch re-imports the FBX instead of dereferencing a freed
+    Action ("StructRNA of type Action has been removed")."""
+    from planner import daemon_runner
+
+    with daemon_runner.daemon() as h:
+        h.call("load_scene", blend_path=SCENE_PATH)
+        h.call("load_character", fbx_path=CHAR_PATH, spawn_point="door", handle="student")
+        first = h.call(
+            "execute_timeline",
+            timeline=_walk_timeline("center_room", 0, 2),
+            asset_paths={"walk_in_place": WALK_PATH},
+        )
+        assert first["executed"][0]["type"] == "walk_to"
+
+        h.call("reset")
+        h.call("load_scene", blend_path=SCENE_PATH)
+        h.call("load_character", fbx_path=CHAR_PATH, spawn_point="door", handle="student")
+        second = h.call(
+            "execute_timeline",
+            timeline=_walk_timeline("center_room", 0, 2),
+            asset_paths={"walk_in_place": WALK_PATH},
+        )
+
+    assert second["skipped"] == []
+    assert second["executed"][0]["type"] == "walk_to"

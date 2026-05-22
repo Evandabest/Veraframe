@@ -24,6 +24,16 @@ class IdleActionError(RuntimeError):
 _LOADED_ACTIONS: dict[str, object] = {}
 
 
+def clear_cache() -> None:
+    """Drop all cached Action references.
+
+    Called by the daemon's `reset` handler after `bpy.data.batch_remove`
+    wipes the scene — leftover entries here would be dead StructRNA
+    references that crash on next access.
+    """
+    _LOADED_ACTIONS.clear()
+
+
 def execute(
     armature,
     animation_fbx_path: str,
