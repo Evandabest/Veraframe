@@ -843,14 +843,16 @@ app.whenReady().then(async () => {
   // live under userAssetsDir). The repo-bundled assets are read-only from the
   // app's perspective.
   const removeAsset = async (
-    kind: 'scene' | 'character',
+    kind: 'scene' | 'character' | 'motion',
     id: string
   ): Promise<{ ok: true } | { ok: false; error: string }> => {
     if (!assets) return { ok: false, error: 'asset registry not loaded' }
     const target =
       kind === 'scene'
         ? assets.scenes[id]?.blendPath
-        : assets.characters[id]?.meshPath
+        : kind === 'character'
+          ? assets.characters[id]?.meshPath
+          : assets.motions[id]?.fbxPath
     if (!target) return { ok: false, error: `${kind} '${id}' not found` }
     if (!target.startsWith(userAssetsDir)) {
       return { ok: false, error: `${kind} '${id}' is a bundled asset and cannot be removed` }
@@ -867,6 +869,48 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('removeScene', async (_event, id: string) => removeAsset('scene', id))
   ipcMain.handle('removeCharacter', async (_event, id: string) => removeAsset('character', id))
+  ipcMain.handle('removeMotion', async (_event, id: string) => removeAsset('motion', id))
+
+  // Upload a user-supplied motion clip. Writes the chosen FBX into
+  // userAssetsDir/motions/<id>/clip.fbx plus a tiny motion.json manifest.
+  ipcMain.handle(
+    'addMotion',
+    async (
+      _event,
+      payload: {
+        sourcePath: string
+        id: string
+        displayName: string
+        description?: string
+      }
+    ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
+      if (!isValidAssetId(payload.id)) {
+        return { ok: false, error: 'id must be alphanumeric / underscore only' }
+      }
+      const motionDir = resolvePath(userAssetsDir, 'motions', payload.id)
+      try {
+        await mkdir(motionDir, { recursive: true })
+        const fbxDest = resolvePath(motionDir, 'clip.fbx')
+        await copyFile(payload.sourcePath, fbxDest)
+        const manifest = {
+          id: payload.id,
+          display_name: payload.displayName,
+          description: payload.description ?? '',
+          fbx_file: 'clip.fbx',
+          applies_to_rig: 'mixamo'
+        }
+        await writeFile(
+          resolvePath(motionDir, 'motion.json'),
+          JSON.stringify(manifest, null, 2),
+          'utf8'
+        )
+        assets = reloadAssets()
+        return { ok: true, id: payload.id }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
 
   // -------------------------------------------------------------------------
   // Project file (.veraframe) save / open.

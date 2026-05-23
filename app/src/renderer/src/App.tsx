@@ -76,7 +76,11 @@ function App(): React.JSX.Element {
   // Asset pool. Loaded from main at startup; refreshed on upload / explicit
   // refresh. The first scene becomes the default selection. Characters default
   // to all-selected so the LLM has the widest pool to pick from.
-  const [registry, setRegistry] = useState<RegistrySummary>({ scenes: [], characters: [] })
+  const [registry, setRegistry] = useState<RegistrySummary>({
+    scenes: [],
+    characters: [],
+    motions: []
+  })
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null)
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([])
   const [uploadKind, setUploadKind] = useState<AssetKind | null>(null)

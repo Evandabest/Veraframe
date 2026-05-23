@@ -66,9 +66,17 @@ export interface RegistryCharacterSummary {
   voice: string
 }
 
+export interface RegistryMotionSummary {
+  id: string
+  displayName: string
+  description: string
+  userProvided: boolean
+}
+
 export interface RegistrySummary {
   scenes: RegistrySceneSummary[]
   characters: RegistryCharacterSummary[]
+  motions: RegistryMotionSummary[]
 }
 
 export interface AddSceneRequest {
@@ -271,6 +279,14 @@ const veraframe = {
     ipcRenderer.invoke('listOllamaModels', host),
   enhancePrompt: (request: EnhancePromptRequest): Promise<EnhancePromptResponse> =>
     ipcRenderer.invoke('enhancePrompt', request),
+  addMotion: (request: {
+    sourcePath: string
+    id: string
+    displayName: string
+    description?: string
+  }): Promise<AddAssetResponse> => ipcRenderer.invoke('addMotion', request),
+  removeMotion: (id: string): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('removeMotion', id),
   generateAction: (request: GenerateActionRequest): Promise<GenerateActionResponse> =>
     ipcRenderer.invoke('generateAction', request),
   editRange: (request: EditRangeRequest): Promise<EditRangeResponse> =>

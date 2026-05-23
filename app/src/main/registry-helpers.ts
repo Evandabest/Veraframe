@@ -18,9 +18,17 @@ export interface RegistryCharacterSummaryDTO {
   voice: string
 }
 
+export interface RegistryMotionSummaryDTO {
+  id: string
+  displayName: string
+  description: string
+  userProvided: boolean
+}
+
 export interface RegistrySummaryDTO {
   scenes: RegistrySceneSummaryDTO[]
   characters: RegistryCharacterSummaryDTO[]
+  motions: RegistryMotionSummaryDTO[]
 }
 
 /**
@@ -30,7 +38,7 @@ export interface RegistrySummaryDTO {
  * repo-bundled `assets/` directory.
  */
 export function summarizeRegistry(reg: AssetRegistry | null): RegistrySummaryDTO {
-  if (!reg) return { scenes: [], characters: [] }
+  if (!reg) return { scenes: [], characters: [], motions: [] }
   const userDir = reg.userAssetsDir
   return {
     scenes: Object.values(reg.scenes).map((s) => ({
@@ -48,6 +56,12 @@ export function summarizeRegistry(reg: AssetRegistry | null): RegistrySummaryDTO
       description: c.description,
       defaultEmotion: c.defaultEmotion,
       voice: c.voice
+    })),
+    motions: Object.values(reg.motions).map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      description: m.description,
+      userProvided: Boolean(userDir && m.fbxPath.startsWith(userDir))
     }))
   }
 }

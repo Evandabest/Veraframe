@@ -52,7 +52,7 @@ const fakeRegistry = (userDir?: string): AssetRegistry => ({
 
 describe('summarizeRegistry', () => {
   it('returns empty arrays for null registry', () => {
-    expect(summarizeRegistry(null)).toEqual({ scenes: [], characters: [] })
+    expect(summarizeRegistry(null)).toEqual({ scenes: [], characters: [], motions: [] })
   })
 
   it('projects scene and character fields the renderer needs', () => {
