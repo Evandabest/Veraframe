@@ -6,6 +6,7 @@ import { VerbPalette } from './components/VerbPalette'
 import { TakesPanel } from './components/TakesPanel'
 import { RangeEditPanel } from './components/RangeEditPanel'
 import { mergeRangeEdit } from './range-edit'
+import { frozenInWindow, toggleFrozen } from './frozen'
 import type { Timeline as TimelineFull, TimelineAction as TLAction } from './timeline-types'
 import { verbByType } from './verbs'
 import { compileScriptToPrompt, parseScript } from './script'
@@ -235,6 +236,15 @@ function App(): React.JSX.Element {
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null)
   const [rangeEditing, setRangeEditing] = useState(false)
   const [rangeEditError, setRangeEditError] = useState<string | null>(null)
+  // Frozen action ids (Step 49). Renderer-only metadata persisted in the
+  // project file. The LLM never sees this — it's a guard rail that
+  // prevents range-edits / accidental rewrites from clobbering blocks
+  // the user has explicitly approved.
+  const [frozenActionIds, setFrozenActionIds] = useState<string[]>([])
+
+  const onToggleFreeze = (actionId: string): void => {
+    setFrozenActionIds((prev) => toggleFrozen(prev, actionId))
+  }
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -390,6 +400,16 @@ function App(): React.JSX.Element {
       return
     }
     const tlBefore = state.timeline as unknown as TimelineFull
+    // Refuse if any locked action overlaps the selected window.
+    const allActions = (tlBefore.shots ?? []).flatMap((s) => s.actions)
+    const blocking = frozenInWindow(allActions, frozenActionIds, selectedRange)
+    if (blocking.length > 0) {
+      const names = blocking.map((a) => `${a.type}(${a.id})`).join(', ')
+      setRangeEditError(
+        `Range overlaps locked action(s): ${names}. Right-click them to unlock, or narrow the selection.`
+      )
+      return
+    }
     setRangeEditing(true)
     setRangeEditError(null)
 
@@ -1332,6 +1352,8 @@ function App(): React.JSX.Element {
                 onPaletteDrop={onPaletteDrop}
                 selectedRange={selectedRange}
                 onRangeSelect={setSelectedRange}
+                frozenActionIds={frozenActionIds}
+                onToggleFreeze={onToggleFreeze}
                 pendingEdit={pendingEditForPanel}
               />
               <RangeEditPanel

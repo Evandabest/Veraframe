@@ -81,6 +81,11 @@ interface TimelinePanelProps {
   /** Fired during and after a range selection drag. Receives null when
    *  the user clears the selection. */
   onRangeSelect?: (range: { start: number; end: number } | null) => void
+  /** Ids of actions the user has frozen / approved. Frozen actions are
+   *  decorated with a lock badge and refuse retime / range-edit. */
+  frozenActionIds?: string[]
+  /** Toggle the frozen state of an action (right-click on the block). */
+  onToggleFreeze?: (actionId: string) => void
   pendingEdit?: PendingActionEdit | null
 }
 
@@ -134,8 +139,11 @@ export function TimelinePanel({
   onPaletteDrop,
   selectedRange,
   onRangeSelect,
+  frozenActionIds,
+  onToggleFreeze,
   pendingEdit
 }: TimelinePanelProps): React.JSX.Element {
+  const frozenSet = new Set(frozenActionIds ?? [])
   const tl = asTimeline(timeline)
   const actions = tl.shots?.flatMap((s) => s.actions) ?? []
   const characters = tl.characters ?? []
@@ -683,13 +691,26 @@ export function TimelinePanel({
                     const [bg, border] = ACTION_COLORS[action.type] ?? DEFAULT_COLORS
                     const isBeingReplaced = pendingForLane?.originalActionId === action.id
                     const isBeingRetimed = useOverride !== null
+                    const isLocked = frozenSet.has(action.id)
+                    const lockTitle = isLocked
+                      ? ' — locked (right-click to unlock; range edits will skip this block)'
+                      : onToggleFreeze
+                        ? ' — right-click to lock'
+                        : ''
                     return (
                       <div
                         key={action.id}
-                        title={`${action.type} (${effectiveStart.toFixed(1)}s–${effectiveEnd.toFixed(1)}s) — click to edit, drag edges to retime`}
-                        className={`pointer-events-none absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white transition-opacity ${isBeingReplaced ? 'opacity-30' : ''} ${isBeingRetimed ? 'ring-2 ring-emerald-400' : ''}`}
+                        onContextMenu={(e) => {
+                          if (!onToggleFreeze) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          onToggleFreeze(action.id)
+                        }}
+                        title={`${action.type} (${effectiveStart.toFixed(1)}s–${effectiveEnd.toFixed(1)}s) — click to edit, drag edges to retime${lockTitle}`}
+                        className={`absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white transition-opacity ${isBeingReplaced ? 'opacity-30' : ''} ${isBeingRetimed ? 'ring-2 ring-emerald-400' : ''} ${isLocked ? 'ring-2 ring-amber-300/80' : 'pointer-events-none'}`}
                         style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%` }}
                       >
+                        {isLocked && <span className="mr-1 text-amber-200">🔒</span>}
                         {action.type}
                       </div>
                     )
