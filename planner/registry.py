@@ -44,6 +44,22 @@ class AnimationManifest(BaseModel):
     applies_to_rig: str = "mixamo"
 
 
+class MotionClipManifest(BaseModel):
+    """User-supplied motion clip (Step 51 — Option C).
+
+    Lives under `motions/<id>/motion.json` next to an FBX (or BVH) carrying
+    the embedded animation. Distinct from `AnimationManifest`, which holds
+    the built-in idle / walk loops the action library uses internally —
+    these are creative content the LLM can schedule via `play_clip`.
+    """
+
+    id: str = Field(min_length=1)
+    display_name: str = Field(min_length=1)
+    description: str = ""
+    fbx_file: str = Field(min_length=1)
+    applies_to_rig: str = "mixamo"
+
+
 # ---------------------------------------------------------------------------
 # Loaded specs — manifest + resolved absolute paths.
 # ---------------------------------------------------------------------------
@@ -76,6 +92,14 @@ class AnimationSpec(BaseModel):
     display_name: str
     fbx_path: Path
     loop: bool
+    applies_to_rig: str
+
+
+class MotionClipSpec(BaseModel):
+    id: str
+    display_name: str
+    description: str
+    fbx_path: Path
     applies_to_rig: str
 
 
@@ -461,6 +485,7 @@ class Registry(BaseModel):
     scenes: dict[str, SceneSpec]
     characters: dict[str, CharacterSpec]
     animations: dict[str, AnimationSpec]
+    motions: dict[str, MotionClipSpec] = Field(default_factory=dict)
     actions: tuple[ActionSpec, ...] = DEFAULT_ACTIONS
 
     def filtered(
@@ -488,6 +513,7 @@ class Registry(BaseModel):
             scenes=scenes,
             characters=characters,
             animations=self.animations,
+            motions=self.motions,
             actions=self.actions,
         )
 
@@ -504,17 +530,24 @@ class Registry(BaseModel):
         scenes = _load_scenes(assets_dir / "scenes")
         characters = _load_characters(assets_dir / "characters")
         animations = _load_animations(assets_dir / "animations")
-        return cls(scenes=scenes, characters=characters, animations=animations)
+        motions = _load_motions(assets_dir / "motions")
+        return cls(
+            scenes=scenes,
+            characters=characters,
+            animations=animations,
+            motions=motions,
+        )
 
     def to_system_prompt_section(self) -> str:
         """Markdown-formatted description for injection into the LLM system prompt."""
-        return "\n\n".join(
-            [
-                self._scenes_section(),
-                self._characters_section(),
-                self._actions_section(),
-            ]
-        )
+        sections = [
+            self._scenes_section(),
+            self._characters_section(),
+        ]
+        if self.motions:
+            sections.append(self._motions_section())
+        sections.append(self._actions_section())
+        return "\n\n".join(sections)
 
     # -- prompt section builders -------------------------------------------
 
@@ -546,6 +579,20 @@ class Registry(BaseModel):
                     " this on walk_to / idle when the scene description does"
                     " not say otherwise."
                 )
+        return "\n".join(lines)
+
+    def _motions_section(self) -> str:
+        """List the user-supplied motion clips available for `play_clip`.
+
+        Only emitted when the registry has at least one clip — saves token
+        budget for projects that don't use the feature.
+        """
+        lines = ["# Available motion clips (for `play_clip`)"]
+        for clip in self.motions.values():
+            lines.append("")
+            lines.append(f"## `{clip.id}` — {clip.display_name}")
+            if clip.description:
+                lines.append(clip.description)
         return "\n".join(lines)
 
     def _actions_section(self) -> str:
@@ -619,6 +666,25 @@ def _load_animations(animations_dir: Path) -> dict[str, AnimationSpec]:
     return out
 
 
+def _load_motions(motions_dir: Path) -> dict[str, MotionClipSpec]:
+    """Load user-supplied motion clips (Step 51). Returns {} when the
+    directory is missing or empty so existing projects without any clips
+    keep working unchanged."""
+    if not motions_dir.is_dir():
+        return {}
+    out: dict[str, MotionClipSpec] = {}
+    for manifest_path in sorted(motions_dir.glob("*/motion.json")):
+        manifest = MotionClipManifest.model_validate_json(manifest_path.read_text())
+        out[manifest.id] = MotionClipSpec(
+            id=manifest.id,
+            display_name=manifest.display_name,
+            description=manifest.description,
+            fbx_path=manifest_path.parent / manifest.fbx_file,
+            applies_to_rig=manifest.applies_to_rig,
+        )
+    return out
+
+
 __all__ = [
     "ActionSpec",
     "AnimationManifest",
@@ -626,6 +692,8 @@ __all__ = [
     "CharacterManifest",
     "CharacterSpec",
     "DEFAULT_ACTIONS",
+    "MotionClipManifest",
+    "MotionClipSpec",
     "ParamSpec",
     "Registry",
     "SceneManifest",
