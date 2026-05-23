@@ -321,11 +321,15 @@ function App(): React.JSX.Element {
       timeline: currentTimeline,
       projectStyle,
       takes,
-      frozenActionIds
+      frozenActionIds,
+      activeRenderId: state.status === 'success' ? state.renderId : undefined
     })
     if (response.ok) {
       setProjectPath(response.path)
-      setProjectNote(`Saved to ${response.path}`)
+      const videoNote = response.videoSidecar
+        ? ` (video saved as ${response.videoSidecar.replace(/^.*[\\/]/, '')})`
+        : ''
+      setProjectNote(`Saved to ${response.path}${videoNote}`)
     } else if (response.error !== 'save canceled') {
       setProjectNote(`Save failed: ${response.error}`)
     }
@@ -352,9 +356,29 @@ function App(): React.JSX.Element {
     setTakes(p.takes ?? [])
     setActiveTakeId(null)
     setFrozenActionIds(p.frozenActionIds ?? [])
-    if (p.timeline) {
-      // Re-render the stored timeline so the user gets back the video editor
-      // populated. This is a direct-mode render — no LLM, no mock fixture.
+    if (p.timeline && response.videoSidecar) {
+      // Sidecar present — load the pre-rendered MP4 directly and skip
+      // the LLM-free re-render. Saves 10-30s on every project open and
+      // keeps the exact video the user saved (including any TTS audio
+      // muxed in at save time, which a re-render wouldn't reproduce
+      // unless the Voice toggle is still on).
+      const tlAny = p.timeline as unknown as { shots?: Array<{ end?: number }> }
+      const durationSec = Math.max(
+        0,
+        ...(tlAny.shots ?? []).map((s) => (typeof s.end === 'number' ? s.end : 0))
+      )
+      setState({
+        status: 'success',
+        renderId: response.videoSidecar.renderId,
+        videoUrl: response.videoSidecar.videoUrl,
+        durationSec,
+        timeline: p.timeline,
+        elapsedMs: 0
+      })
+      setProjectNote(`Loaded project (using saved video — no re-render).`)
+    } else if (p.timeline) {
+      // No sidecar — fall back to the pre-Step-XX behavior: re-render the
+      // stored timeline so the user still gets a video back.
       const startedAt = Date.now()
       setState({ status: 'running', startedAt })
       const renderResp = await window.veraframe.render({

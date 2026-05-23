@@ -150,11 +150,19 @@ export interface ProjectFile {
 }
 
 export type SaveProjectResponse =
-  | { ok: true; path: string }
+  | { ok: true; path: string; videoSidecar: string | null }
   | { ok: false; error: string }
 
 export type OpenProjectResponse =
-  | { ok: true; project: ProjectFile; path: string }
+  | {
+      ok: true
+      project: ProjectFile
+      path: string
+      /** Present when a sibling `<base>.mp4` exists next to the project
+       *  file. The renderer plays this directly and skips the auto-
+       *  rerender. */
+      videoSidecar: { renderId: string; videoUrl: string } | null
+    }
   | { ok: false; error: string }
 
 export type PickCharacterFolderResponse =
@@ -335,7 +343,7 @@ const veraframe = {
   ): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke('updateScene', request),
   saveProject: (
-    payload: Omit<ProjectFile, 'version' | 'savedAt'>
+    payload: Omit<ProjectFile, 'version' | 'savedAt'> & { activeRenderId?: string }
   ): Promise<SaveProjectResponse> => ipcRenderer.invoke('saveProject', payload),
   openProject: (): Promise<OpenProjectResponse> => ipcRenderer.invoke('openProject'),
   saveDocumentation: (

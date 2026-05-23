@@ -984,8 +984,10 @@ app.whenReady().then(async () => {
     'saveProject',
     async (
       _event,
-      payload: ProjectFilePayload
-    ): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+      payload: ProjectFilePayload & { activeRenderId?: string }
+    ): Promise<
+      { ok: true; path: string; videoSidecar: string | null } | { ok: false; error: string }
+    > => {
       // Anchor the save dialog to a stable folder so users can always
       // find their projects later. Creating it on first save means we
       // never assume it exists.
@@ -1013,7 +1015,26 @@ app.whenReady().then(async () => {
       }
       try {
         await writeFile(filePath, serializeProjectFile(payload), 'utf8')
-        return { ok: true, path: filePath }
+        // Persist the rendered MP4 next to the project as a sidecar
+        // (`<base>.mp4`). Opening the project later loads this directly
+        // and skips the auto-rerender, so the user gets their video back
+        // instantly. If there's nothing to save (mock mode, never
+        // rendered) we just skip the copy.
+        let videoSidecar: string | null = null
+        if (payload.activeRenderId) {
+          const sourcePath = renderedVideos.get(payload.activeRenderId)
+          if (sourcePath) {
+            const sidecarPath = filePath.replace(/\.(veraframe|json)$/i, '.mp4')
+            try {
+              await copyFile(sourcePath, sidecarPath)
+              videoSidecar = sidecarPath
+            } catch (err) {
+              // Non-fatal: project file still saved; user can re-render.
+              console.warn('[saveProject] video sidecar copy failed:', err)
+            }
+          }
+        }
+        return { ok: true, path: filePath, videoSidecar }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
@@ -1022,7 +1043,15 @@ app.whenReady().then(async () => {
 
   ipcMain.handle(
     'openProject',
-    async (): Promise<{ ok: true; project: ProjectFile; path: string } | { ok: false; error: string }> => {
+    async (): Promise<
+      | {
+          ok: true
+          project: ProjectFile
+          path: string
+          videoSidecar: { renderId: string; videoUrl: string } | null
+        }
+      | { ok: false; error: string }
+    > => {
       const projectsDir = resolvePath(app.getPath('documents'), 'Veraframe')
       const result = await dialog.showOpenDialog({
         title: 'Open project',
@@ -1041,10 +1070,28 @@ app.whenReady().then(async () => {
         return { ok: false, error: 'open canceled' }
       }
       try {
-        const raw = await readFile(result.filePaths[0], 'utf8')
+        const projectPath = result.filePaths[0]
+        const raw = await readFile(projectPath, 'utf8')
         const parsed = parseProjectFile(raw)
         if (!parsed.ok) return parsed
-        return { ok: true, project: parsed.project, path: result.filePaths[0] }
+        // Look for a sidecar `<base>.mp4` next to the project. If found,
+        // register it in renderedVideos under a fresh id so the renderer
+        // can play it via the existing veraframe-render:// protocol —
+        // skipping the auto-rerender on Open entirely.
+        let videoSidecar: { renderId: string; videoUrl: string } | null = null
+        const sidecarPath = projectPath.replace(/\.(veraframe|json)$/i, '.mp4')
+        try {
+          await stat(sidecarPath)
+          const renderId = randomUUID()
+          renderedVideos.set(renderId, sidecarPath)
+          videoSidecar = {
+            renderId,
+            videoUrl: `veraframe-render://${renderId}/video.mp4`
+          }
+        } catch {
+          /* no sidecar present — caller will fall back to re-render */
+        }
+        return { ok: true, project: parsed.project, path: projectPath, videoSidecar }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
