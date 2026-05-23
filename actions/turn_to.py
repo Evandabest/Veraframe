@@ -23,6 +23,13 @@ class TurnToActionError(RuntimeError):
 
 
 _EFFECTIVE_YAW_PROP = "veraframe_effective_yaw"
+# Mirrors walk_to's custom property. Walk_to animates location via an
+# ADD-blend NLA strip and leaves the static `armature.location` at
+# (0,0,0); the strip only takes effect during render. So we cannot trust
+# `armature.matrix_world.translation` at dispatch time to reflect the
+# character's post-walk position — walk_to writes the end position into
+# this custom property and turn_to reads it back here.
+_EFFECTIVE_LOCATION_PROP = "veraframe_effective_location"
 
 
 def execute(
@@ -39,10 +46,19 @@ def execute(
     if armature.animation_data is None:
         armature.animation_data_create()
 
-    arm_pos = armature.matrix_world.translation
+    # Prefer the stored effective location (set by the most recent walk_to)
+    # over the armature's static world translation — see comment on the
+    # constant above.
+    stored_loc = armature.get(_EFFECTIVE_LOCATION_PROP)
+    if stored_loc is not None and len(stored_loc) == 3:
+        arm_x, arm_y, _ = (float(v) for v in stored_loc)
+    else:
+        arm_world = armature.matrix_world.translation
+        arm_x, arm_y = arm_world.x, arm_world.y
+
     target_pos = target_obj.matrix_world.translation
-    dx = target_pos.x - arm_pos.x
-    dy = target_pos.y - arm_pos.y
+    dx = target_pos.x - arm_x
+    dy = target_pos.y - arm_y
     if dx == 0.0 and dy == 0.0:
         raise TurnToActionError(
             f"target '{target_obj.name}' is at the same XY position as armature '{armature.name}'"
