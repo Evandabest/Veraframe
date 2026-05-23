@@ -223,6 +223,9 @@ function App(): React.JSX.Element {
   const [state, setState] = useState<RenderState>({ status: 'idle' })
   const [quality, setQuality] = useState<'draft' | 'hifi'>('hifi')
   const [generateAudio, setGenerateAudio] = useState(false)
+  // Step 52 — walk_to uses a foot-aligned stride formula by default. The
+  // toggle lets users A/B against the legacy duration-only behavior.
+  const [physicsPostPass, setPhysicsPostPass] = useState(true)
   // Project-level style lock. When set, the daemon injects defaults into
   // every shot (e.g. set_lighting at shot start) unless the author already
   // authored the same kind of action at the shot's start.
@@ -331,7 +334,8 @@ function App(): React.JSX.Element {
         mode: 'direct',
         timeline: p.timeline,
         quality,
-        projectStyle
+        projectStyle,
+        physicsPostPass
       })
       const elapsedMs = Date.now() - startedAt
       if (renderResp.ok) {
@@ -475,7 +479,8 @@ function App(): React.JSX.Element {
       },
       quality,
       generateAudio,
-      projectStyle
+      projectStyle,
+      physicsPostPass
     })
     const elapsedMs = Date.now() - startedAt
     setRangeEditing(false)
@@ -522,7 +527,8 @@ function App(): React.JSX.Element {
         mode === 'llm' && selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
       quality,
       generateAudio,
-      projectStyle
+      projectStyle,
+      physicsPostPass
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -738,7 +744,8 @@ function App(): React.JSX.Element {
       incremental,
       quality,
       generateAudio,
-      projectStyle
+      projectStyle,
+      physicsPostPass
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -809,7 +816,8 @@ function App(): React.JSX.Element {
       incremental,
       quality,
       generateAudio,
-      projectStyle
+      projectStyle,
+      physicsPostPass
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -873,7 +881,8 @@ function App(): React.JSX.Element {
       timeline: tl as unknown as Record<string, unknown>,
       quality,
       generateAudio,
-      projectStyle
+      projectStyle,
+      physicsPostPass
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -1295,6 +1304,19 @@ function App(): React.JSX.Element {
                 className="h-3 w-3 accent-blue-500"
               />
               Voice
+            </label>
+            <label
+              className="inline-flex items-center gap-1.5 text-xs text-neutral-300"
+              title="When on, walk_to ties stride count to actual travel distance — feet plant where they land instead of sliding. Turn off for a pre-Step-52 A/B comparison."
+            >
+              <input
+                type="checkbox"
+                checked={physicsPostPass}
+                onChange={(e) => setPhysicsPostPass(e.target.checked)}
+                disabled={isRunning}
+                className="h-3 w-3 accent-blue-500"
+              />
+              Foot-lock
             </label>
           </div>
         </section>

@@ -67,6 +67,8 @@ export interface RenderRequest {
   projectStyle?: {
     lighting?: string
   }
+  /** Step 52 physics post-pass toggle. Defaults to true server-side. */
+  physicsPostPass?: boolean
 }
 
 interface RenderSuccess {
@@ -349,7 +351,8 @@ app.whenReady().then(async () => {
         quality: request.quality,
         repoRoot: resolveRepoRoot(),
         generateAudio: request.generateAudio,
-        projectStyle: request.projectStyle
+        projectStyle: request.projectStyle,
+        physicsPostPass: request.physicsPostPass
       })
       renderedVideos.set(result.renderId, result.videoPath)
       return {

@@ -40,6 +40,9 @@ export interface RenderRequest {
     /** Name of a lighting preset from the active scene. */
     lighting?: string
   }
+  /** Step 52 — when true (default), walk_to uses a stride-aware repeat
+   *  formula that eliminates most foot-slide. False = legacy formula. */
+  physicsPostPass?: boolean
 }
 
 export interface RegistrySceneSummary {

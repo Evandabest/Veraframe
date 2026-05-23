@@ -56,6 +56,10 @@ export interface RenderOptions {
   generateAudio?: boolean
   /** Project-level style lock forwarded to the daemon's execute_timeline. */
   projectStyle?: ProjectStyle
+  /** Step 52 physics post-pass. When true (default), walk_to ties stride
+   *  count to actual travel distance — eliminates most foot-slide. Pass
+   *  false to fall back to the legacy duration-only formula. */
+  physicsPostPass?: boolean
 }
 
 export interface RenderResult {
@@ -144,7 +148,8 @@ export async function runTimeline(
     asset_paths: assetPaths,
     character_assets: characterAssets,
     fps,
-    project_style: options.projectStyle ?? null
+    project_style: options.projectStyle ?? null,
+    physics_post_pass: options.physicsPostPass ?? true
   })) as { executed: unknown[]; skipped: unknown[] }
 
   if (options.incremental) {
