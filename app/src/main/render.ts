@@ -101,6 +101,11 @@ export async function runTimeline(
   for (const [id, anim] of Object.entries(assets.animations)) {
     assetPaths[id] = anim.fbxPath
   }
+  // Motion clips (Step 51) are namespaced with the `motion:` prefix so they
+  // don't collide with built-in animation slots (idle, walk_in_place).
+  for (const [id, clip] of Object.entries(assets.motions)) {
+    assetPaths[`motion:${id}`] = clip.fbxPath
+  }
 
   emit({ step: 'reset' })
   await daemon.call('reset')

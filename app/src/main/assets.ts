@@ -37,6 +37,14 @@ export interface AnimationManifest {
   fbxPath: string
 }
 
+export interface MotionClipManifest {
+  id: string
+  displayName: string
+  description: string
+  fbxPath: string
+  appliesToRig: string
+}
+
 export interface AssetRegistry {
   /** Primary (repo-bundled) assets directory. */
   assetsDir: string
@@ -45,6 +53,8 @@ export interface AssetRegistry {
   scenes: Record<string, SceneManifest>
   characters: Record<string, CharacterManifest>
   animations: Record<string, AnimationManifest>
+  /** User-supplied motion clips for the `play_clip` action. Step 51 — Option C. */
+  motions: Record<string, MotionClipManifest>
 }
 
 /**
@@ -89,6 +99,18 @@ export function loadAssets(assetsDir: string, userAssetsDir?: string): AssetRegi
         }
       }
     )
+  const scanMotions = (dir: string): Record<string, MotionClipManifest> =>
+    loadGroup<MotionClipManifest>(
+      resolvePath(dir, 'motions'),
+      'motion.json',
+      (raw, d) => ({
+        id: String(raw.id),
+        displayName: String(raw.display_name ?? raw.id),
+        description: typeof raw.description === 'string' ? raw.description : '',
+        fbxPath: resolvePath(d, String(raw.fbx_file)),
+        appliesToRig: String(raw.applies_to_rig ?? 'mixamo')
+      })
+    )
   const scanAnimations = (dir: string): Record<string, AnimationManifest> =>
     loadGroup<AnimationManifest>(
       resolvePath(dir, 'animations'),
@@ -111,6 +133,10 @@ export function loadAssets(assetsDir: string, userAssetsDir?: string): AssetRegi
     animations: {
       ...scanAnimations(assetsDir),
       ...(userAssetsDir ? scanAnimations(userAssetsDir) : {})
+    },
+    motions: {
+      ...scanMotions(assetsDir),
+      ...(userAssetsDir ? scanMotions(userAssetsDir) : {})
     }
   }
 }

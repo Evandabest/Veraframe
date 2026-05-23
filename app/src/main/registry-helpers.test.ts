@@ -46,7 +46,8 @@ const fakeRegistry = (userDir?: string): AssetRegistry => ({
       voice: ''
     }
   },
-  animations: {}
+  animations: {},
+  motions: {}
 })
 
 describe('summarizeRegistry', () => {
