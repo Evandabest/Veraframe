@@ -4,7 +4,8 @@ import { tmpdir } from 'os'
 import { resolve as resolvePath } from 'path'
 import type { DaemonHandle } from './daemon'
 import type { AssetRegistry } from './assets'
-import { ffmpegAppend, ffmpegSplice } from './ffmpeg'
+import { ffmpegAppend, ffmpegMuxAudio, ffmpegSplice } from './ffmpeg'
+import { runTts } from './planner'
 
 export interface RenderProgress {
   step: string
@@ -37,6 +38,13 @@ export interface RenderOptions {
    *  'hifi' = full resolution + samples (default). For incremental renders,
    *  the splice/append seam quality is best when this matches the base. */
   quality?: RenderQuality
+  /** Repo root needed to spawn the TTS subprocess. Required if any talk
+   *  action is in the timeline and the user wants audio. */
+  repoRoot?: string
+  /** Whether to call TTS for `talk` actions. Defaults to false (silent video,
+   *  current behavior). When true and `repoRoot` is set, each talk action's
+   *  text is synthesized to a WAV and muxed into the final MP4. */
+  generateAudio?: boolean
 }
 
 export interface RenderResult {
@@ -158,13 +166,33 @@ export async function runTimeline(
   } else {
     const endFrame = Math.round(durationSec * fps)
     emit({ step: 'render', detail: `${endFrame + 1} frame(s) (${quality})` })
+    // Render to a temporary "silent" path; we mux audio in a separate pass
+    // afterwards (if there's any audio to mux). Skip the temp file when
+    // generateAudio is off — render directly to outputPath.
+    const silentPath = options.generateAudio
+      ? resolvePath(tmpdir(), `veraframe-silent-${renderId}.mp4`)
+      : outputPath
     await daemon.call('render', {
       start_frame: 0,
       end_frame: endFrame,
-      output_path: outputPath,
+      output_path: silentPath,
       fps,
       quality
     })
+
+    if (options.generateAudio) {
+      const clips = await _synthesizeTalkAudio(
+        timeline,
+        options.repoRoot,
+        emit
+      )
+      emit({ step: 'mux_audio', detail: `${clips.length} clip(s)` })
+      await ffmpegMuxAudio(silentPath, outputPath, clips)
+      await unlink(silentPath).catch(() => {})
+      // Audio temp files are intentionally NOT cleaned up here — they're
+      // small and useful for debugging mis-timed lip-sync. The OS will
+      // clean tmpdir eventually.
+    }
   }
 
   return {
@@ -175,4 +203,38 @@ export async function runTimeline(
     skipped: execResult.skipped.length,
     timeline
   }
+}
+
+/** Walk the timeline, run TTS for every `talk` action, and return placement
+ *  clips for ffmpegMuxAudio. Failures synthesize-side are logged but do not
+ *  abort the render — the action just falls back to silent. */
+async function _synthesizeTalkAudio(
+  timeline: Record<string, unknown>,
+  repoRoot: string | undefined,
+  emit: (event: RenderProgress) => void
+): Promise<Array<{ audioPath: string; offsetSec: number }>> {
+  if (!repoRoot) return []
+  const shots = (timeline.shots ?? []) as Array<Record<string, unknown>>
+  const clips: Array<{ audioPath: string; offsetSec: number }> = []
+  let index = 0
+  for (const shot of shots) {
+    const actions = (shot.actions ?? []) as Array<Record<string, unknown>>
+    for (const action of actions) {
+      if (action.type !== 'talk') continue
+      const text = String(action.text ?? '').trim()
+      if (!text) continue
+      const offsetSec = Number(action.start ?? 0)
+      const wavPath = resolvePath(tmpdir(), `veraframe-tts-${randomUUID()}.wav`)
+      emit({ step: 'tts', detail: `"${text.slice(0, 40)}…"` })
+      try {
+        const result = await runTts(text, wavPath, repoRoot)
+        clips.push({ audioPath: result.output_path, offsetSec })
+      } catch (err) {
+        // Don't fail the whole render on a TTS error — log and move on.
+        console.warn(`[render] TTS failed for action #${index}: ${(err as Error).message}`)
+      }
+      index += 1
+    }
+  }
+  return clips
 }
