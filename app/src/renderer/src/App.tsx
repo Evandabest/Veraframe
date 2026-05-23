@@ -147,8 +147,42 @@ function App(): React.JSX.Element {
     else window.alert(`Remove failed: ${response.error}`)
   }
 
-  const [provider, setProvider] = useState<LLMProvider>('openai')
-  const [model, setModel] = useState<string>(PROVIDER_DEFAULT_MODEL.openai)
+  // Persist the LLM provider + model across app launches via localStorage,
+  // so the user doesn't have to re-pick them every session. The project
+  // file's provider/model still takes precedence when one is opened (the
+  // load path calls setProvider/setModel, which writes back to localStorage
+  // on the next effect tick — "last used" wins).
+  const [provider, setProvider] = useState<LLMProvider>(() => {
+    const saved = localStorage.getItem('veraframe.llm.provider') as LLMProvider | null
+    if (saved && saved in PROVIDER_DEFAULT_MODEL) return saved
+    return 'openai'
+  })
+  const [model, setModel] = useState<string>(() => {
+    const savedModel = localStorage.getItem('veraframe.llm.model')
+    if (savedModel) return savedModel
+    const savedProvider = localStorage.getItem(
+      'veraframe.llm.provider'
+    ) as LLMProvider | null
+    if (savedProvider && savedProvider in PROVIDER_DEFAULT_MODEL) {
+      return PROVIDER_DEFAULT_MODEL[savedProvider]
+    }
+    return PROVIDER_DEFAULT_MODEL.openai
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('veraframe.llm.provider', provider)
+    } catch {
+      /* localStorage can throw in private mode / sandboxed contexts */
+    }
+  }, [provider])
+  useEffect(() => {
+    try {
+      localStorage.setItem('veraframe.llm.model', model)
+    } catch {
+      /* see above */
+    }
+  }, [model])
   // Hardcoded localhost; advanced users can set OLLAMA_API_BASE in their shell.
   const ollamaHost = 'http://localhost:11434'
   const [ollamaModels, setOllamaModels] = useState<string[] | null>(null)
