@@ -676,6 +676,8 @@ app.whenReady().then(async () => {
         id: string
         displayName: string
         description?: string
+        defaultEmotion?: string
+        voice?: string
       }
     ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
       if (!isValidAssetId(payload.id)) {
@@ -693,7 +695,9 @@ app.whenReady().then(async () => {
         const manifest = buildCharacterManifest({
           id: payload.id,
           displayName: payload.displayName,
-          description: payload.description
+          description: payload.description,
+          defaultEmotion: payload.defaultEmotion,
+          voice: payload.voice
         })
         await writeFile(
           resolvePath(charDir, 'character.json'),
@@ -780,6 +784,8 @@ app.whenReady().then(async () => {
         walkPath?: string | null
         displayName?: string | null
         description?: string | null
+        defaultEmotion?: string | null
+        voice?: string | null
       }
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!assets) return { ok: false, error: 'asset registry not loaded' }
@@ -811,6 +817,12 @@ app.whenReady().then(async () => {
         if (payload.displayName) manifest.display_name = payload.displayName
         if (payload.description !== undefined && payload.description !== null) {
           manifest.description = payload.description
+        }
+        if (payload.defaultEmotion !== undefined && payload.defaultEmotion !== null) {
+          manifest.default_emotion = payload.defaultEmotion
+        }
+        if (payload.voice !== undefined && payload.voice !== null) {
+          manifest.voice = payload.voice
         }
         manifest.mesh_file = 'character.fbx'
         manifest.rig_type = manifest.rig_type ?? 'mixamo'

@@ -13,6 +13,9 @@ export interface RegistryCharacterSummaryDTO {
   id: string
   displayName: string
   userProvided: boolean
+  description: string
+  defaultEmotion: string
+  voice: string
 }
 
 export interface RegistrySummaryDTO {
@@ -41,7 +44,10 @@ export function summarizeRegistry(reg: AssetRegistry | null): RegistrySummaryDTO
     characters: Object.values(reg.characters).map((c) => ({
       id: c.id,
       displayName: c.displayName,
-      userProvided: Boolean(userDir && c.meshPath.startsWith(userDir))
+      userProvided: Boolean(userDir && c.meshPath.startsWith(userDir)),
+      description: c.description,
+      defaultEmotion: c.defaultEmotion,
+      voice: c.voice
     }))
   }
 }

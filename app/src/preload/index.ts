@@ -57,6 +57,13 @@ export interface RegistryCharacterSummary {
   id: string
   displayName: string
   userProvided: boolean
+  /** Free-form bio surfaced in the Library and folded into the LLM system
+   *  prompt. Empty string when unset. */
+  description: string
+  /** Default Emotion enum value, or empty string. */
+  defaultEmotion: string
+  /** TTS voice id, or empty string. */
+  voice: string
 }
 
 export interface RegistrySummary {
@@ -81,6 +88,10 @@ export interface AddCharacterRequest {
   id: string
   displayName: string
   description?: string
+  /** Optional Emotion enum value applied by default. */
+  defaultEmotion?: string
+  /** Optional TTS voice id (provider-specific). */
+  voice?: string
 }
 
 export interface UpdateCharacterRequest {
@@ -90,6 +101,8 @@ export interface UpdateCharacterRequest {
   walkPath?: string | null
   displayName?: string | null
   description?: string | null
+  defaultEmotion?: string | null
+  voice?: string | null
 }
 
 export interface ProjectFile {
