@@ -35,7 +35,7 @@ export function VerbPalette({ open, onClose }: VerbPaletteProps): React.JSX.Elem
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="absolute right-4 top-20 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900/95 p-3 shadow-2xl backdrop-blur"
+        className="absolute bottom-4 right-4 max-h-[70vh] w-80 overflow-y-auto rounded-xl border border-neutral-700 bg-neutral-900/95 p-3 shadow-2xl backdrop-blur"
       >
         <header className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-neutral-100">Verbs</h3>
