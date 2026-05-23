@@ -128,6 +128,41 @@ function asTimeline(raw: Record<string, unknown>): Timeline {
   return raw as unknown as Timeline
 }
 
+// Lane sub-row sizing. Each action block is `_BLOCK_PX` tall + `_SUB_ROW_GAP_PX`
+// of vertical breathing room. A lane with N sub-rows is therefore
+// `_LANE_TOP_PAD + N * (_BLOCK_PX + _SUB_ROW_GAP_PX)` px tall (matches the
+// existing single-row `h-8` when N=1).
+const _BLOCK_PX = 24
+const _SUB_ROW_GAP_PX = 4
+const _LANE_TOP_PAD = 4
+
+/**
+ * Greedy sub-row allocation for a lane's actions. Sort by start time;
+ * for each action, drop it into the lowest-index sub-row whose most-
+ * recent action's end is ≤ this action's start (boundary-touching is
+ * not overlap). Returns `{ subRows: id → row, rowCount }`.
+ */
+function assignSubRows(actions: TimelineAction[]): {
+  subRows: Map<string, number>
+  rowCount: number
+} {
+  const sorted = [...actions].sort((a, b) => a.start - b.start)
+  const rowEnds: number[] = []
+  const out = new Map<string, number>()
+  for (const a of sorted) {
+    let row = 0
+    while (row < rowEnds.length && rowEnds[row] > a.start + 0.001) row += 1
+    if (row === rowEnds.length) rowEnds.push(0)
+    rowEnds[row] = a.end
+    out.set(a.id, row)
+  }
+  return { subRows: out, rowCount: Math.max(1, rowEnds.length) }
+}
+
+function laneHeightPx(rowCount: number): number {
+  return _LANE_TOP_PAD * 2 + rowCount * _BLOCK_PX + (rowCount - 1) * _SUB_ROW_GAP_PX
+}
+
 export function TimelinePanel({
   timeline,
   videoRef,
@@ -485,6 +520,22 @@ export function TimelinePanel({
     seekFromClientX(event.clientX)
   }
 
+  // Per-lane sub-row allocation. Stacking overlapping action blocks
+  // vertically inside a single lane is what makes concurrent beats
+  // (walk + talk + look_at on the same character) legible instead of
+  // overlapping on top of one another. Each lane gets the SAME height
+  // (max sub-row count across all lanes) so the rows line up vertically
+  // even when one character is much busier than another.
+  const laneLayouts = lanes.map((lane) => {
+    const { subRows, rowCount } = assignSubRows(lane.actions)
+    return { laneId: lane.id, subRows, rowCount }
+  })
+  const maxRowCount = Math.max(1, ...laneLayouts.map((l) => l.rowCount))
+  const uniformLaneHeightPx = laneHeightPx(maxRowCount)
+  const laneLayoutById = new Map(
+    laneLayouts.map((l) => [l.laneId, { ...l, heightPx: uniformLaneHeightPx }])
+  )
+
   // Compute the start time for a lane's "+" button. Lives in its own
   // gutter column (right of the lane content), so we don't need an X
   // position — just where in the timeline a new action should start. If the
@@ -516,14 +567,18 @@ export function TimelinePanel({
             of this column so it sits directly under the character names. */}
         <div className="flex w-24 flex-shrink-0 flex-col gap-1">
           <div className="h-5" /> {/* ruler spacer */}
-          {lanes.map((lane) => (
-            <div
-              key={`label-${lane.id}`}
-              className="flex h-8 items-center text-xs text-neutral-400"
-            >
-              {lane.label}
-            </div>
-          ))}
+          {lanes.map((lane) => {
+            const layout = laneLayoutById.get(lane.id)
+            return (
+              <div
+                key={`label-${lane.id}`}
+                className="flex items-center text-xs text-neutral-400"
+                style={{ height: layout ? `${layout.heightPx}px` : '32px' }}
+              >
+                {lane.label}
+              </div>
+            )
+          })}
           {onAddCharacter && (
             <button
               type="button"
@@ -654,6 +709,7 @@ export function TimelinePanel({
                 onPaletteDrop(lane.id, timeSec, verbType)
               }
 
+              const layout = laneLayoutById.get(lane.id)
               return (
                 <div
                   key={lane.id}
@@ -661,10 +717,13 @@ export function TimelinePanel({
                   onDragOver={onDragOver}
                   onDragLeave={onDragLeave}
                   onDrop={onDrop}
-                  className={`relative h-8 rounded bg-neutral-950/60 ${
+                  className={`relative rounded bg-neutral-950/60 ${
                     isDropTarget ? 'ring-2 ring-blue-400' : ''
                   } ${scrubbingCursor ? 'cursor-grabbing' : 'cursor-pointer'}`}
-                  style={{ touchAction: 'none' }}
+                  style={{
+                    touchAction: 'none',
+                    height: layout ? `${layout.heightPx}px` : '32px'
+                  }}
                 >
                   {/* Subtle "extension area" shading past the current video
                       end so the user knows that region isn't rendered yet. */}
@@ -698,6 +757,8 @@ export function TimelinePanel({
                       : onToggleFreeze
                         ? ' — right-click to lock'
                         : ''
+                    const subRow = layout?.subRows.get(action.id) ?? 0
+                    const topPx = _LANE_TOP_PAD + subRow * (_BLOCK_PX + _SUB_ROW_GAP_PX)
                     return (
                       <div
                         key={action.id}
@@ -708,8 +769,13 @@ export function TimelinePanel({
                           onToggleFreeze(action.id)
                         }}
                         title={`${action.type} (${effectiveStart.toFixed(1)}s–${effectiveEnd.toFixed(1)}s) — click to edit, drag edges to retime${lockTitle}`}
-                        className={`absolute top-1 h-6 overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white transition-opacity ${isBeingReplaced ? 'opacity-30' : ''} ${isBeingRetimed ? 'ring-2 ring-emerald-400' : ''} ${isLocked ? 'ring-2 ring-amber-300/80' : 'pointer-events-none'}`}
-                        style={{ left: `${left}%`, width: `${Math.max(width, 0.5)}%` }}
+                        className={`absolute overflow-hidden rounded border ${bg} ${border} px-1 text-[10px] leading-6 text-white transition-opacity ${isBeingReplaced ? 'opacity-30' : ''} ${isBeingRetimed ? 'ring-2 ring-emerald-400' : ''} ${isLocked ? 'ring-2 ring-amber-300/80' : 'pointer-events-none'}`}
+                        style={{
+                          left: `${left}%`,
+                          width: `${Math.max(width, 0.5)}%`,
+                          top: `${topPx}px`,
+                          height: `${_BLOCK_PX}px`
+                        }}
                       >
                         {isLocked && <span className="mr-1 text-amber-200">🔒</span>}
                         {action.type}
@@ -775,7 +841,11 @@ export function TimelinePanel({
           {lanes.map((lane) => {
             const addBtn = addButtonStart(lane)
             return (
-              <div key={`add-${lane.id}`} className="flex h-8 items-center justify-center">
+              <div
+                key={`add-${lane.id}`}
+                className="flex items-center justify-center"
+                style={{ height: `${uniformLaneHeightPx}px` }}
+              >
                 {addBtn && (
                   <button
                     type="button"
