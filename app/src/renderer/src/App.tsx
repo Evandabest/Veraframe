@@ -4,6 +4,7 @@ import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
 import { VerbPalette } from './components/VerbPalette'
 import { verbByType } from './verbs'
+import { compileScriptToPrompt, parseScript } from './script'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
 import { EditSceneModal } from './components/EditSceneModal'
@@ -209,6 +210,11 @@ function App(): React.JSX.Element {
   // authored the same kind of action at the shot's start.
   const [projectStyle, setProjectStyle] = useState<{ lighting?: string }>({})
   const [verbPaletteOpen, setVerbPaletteOpen] = useState(false)
+  // Script mode lets the user author a multi-segment timestamped script
+  // (`@<time> <prompt>` per line) instead of one free-form prompt. When
+  // enabled the textarea is parsed into segments and compiled to a
+  // structured prompt the LLM honors verbatim.
+  const [scriptMode, setScriptMode] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -311,11 +317,21 @@ function App(): React.JSX.Element {
 
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
+    // In script mode, compile the timestamped lines into a structured prompt
+    // before sending to the LLM. If parsing produces errors we leave the raw
+    // text alone — the UI surfaces the error inline.
+    let effectivePrompt = prompt
+    if (mode === 'llm' && scriptMode) {
+      const parsed = parseScript(prompt)
+      if (parsed.errors.length === 0 && parsed.segments.length > 0) {
+        effectivePrompt = compileScriptToPrompt(parsed.segments)
+      }
+    }
     const startedAt = Date.now()
     setState({ status: 'running', startedAt })
     const response = await window.veraframe.render({
       mode,
-      prompt: mode === 'llm' ? prompt : undefined,
+      prompt: mode === 'llm' ? effectivePrompt : undefined,
       provider: mode === 'llm' ? provider : undefined,
       model: mode === 'llm' ? model.trim() || undefined : undefined,
       ollamaHost: undefined,
@@ -846,6 +862,20 @@ function App(): React.JSX.Element {
               />
               LLM (requires API key)
             </label>
+            {mode === 'llm' && (
+              <label
+                className="ml-auto flex items-center gap-2 text-xs text-neutral-300"
+                title="Script mode: author multiple timestamped prompts, one per line (e.g. '@0 walk to door' / '@4 wave')"
+              >
+                <input
+                  type="checkbox"
+                  checked={scriptMode}
+                  onChange={(e) => setScriptMode(e.target.checked)}
+                  disabled={isRunning}
+                />
+                Script mode
+              </label>
+            )}
           </div>
 
           <div className="relative">
@@ -855,7 +885,9 @@ function App(): React.JSX.Element {
               disabled={mode !== 'llm' || isRunning}
               placeholder={
                 mode === 'llm'
-                  ? 'Describe a scene, e.g. "the student walks to the center of the lab and smiles"'
+                  ? scriptMode
+                    ? '@0 alice walks to the door\n@4 alice waves at bob\n@6-10 they argue'
+                    : 'Describe a scene, e.g. "the student walks to the center of the lab and smiles"'
                   : 'Mock mode renders a canned timeline; no prompt needed.'
               }
               className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 pr-24 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
@@ -875,6 +907,39 @@ function App(): React.JSX.Element {
           {enhanceError && (
             <p className="text-xs text-red-400">Enhance failed: {enhanceError}</p>
           )}
+
+          {mode === 'llm' && scriptMode && prompt.trim() !== '' && (() => {
+            const parsed = parseScript(prompt)
+            if (parsed.errors.length > 0) {
+              return (
+                <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-200">
+                  <p className="font-semibold">Script errors</p>
+                  <ul className="mt-0.5 list-disc pl-4">
+                    {parsed.errors.slice(0, 4).map((e, i) => (
+                      <li key={i}>line {e.line}: {e.message}</li>
+                    ))}
+                    {parsed.errors.length > 4 && (
+                      <li>+ {parsed.errors.length - 4} more</li>
+                    )}
+                  </ul>
+                </div>
+              )
+            }
+            const seg = parsed.segments
+            return (
+              <p className="text-[11px] text-neutral-500">
+                {seg.length} segment{seg.length === 1 ? '' : 's'} parsed
+                {seg.length > 0 && (
+                  <span>
+                    {' '}— spans {seg[0].start.toFixed(1)}s to{' '}
+                    {seg[seg.length - 1].end !== null
+                      ? `${seg[seg.length - 1].end?.toFixed(1)}s`
+                      : 'end of video'}
+                  </span>
+                )}
+              </p>
+            )
+          })()}
 
           {pendingEnhanced && (
             <div
