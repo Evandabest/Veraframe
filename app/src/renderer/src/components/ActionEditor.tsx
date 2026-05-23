@@ -70,6 +70,9 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
   const [prompt, setPrompt] = useState(initialPrompt ?? '')
   const [enhancing, setEnhancing] = useState(false)
   const [enhanceError, setEnhanceError] = useState<string | null>(null)
+  // Pending enhancement, shown in a review panel before the user
+  // accepts or rejects it (mirrors the main scene-prompt Enhance flow).
+  const [pendingEnhanced, setPendingEnhanced] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Reset the prompt and focus the textarea each time the modal opens for a
@@ -79,6 +82,7 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
     if (open) {
       setPrompt(initialPrompt ?? '')
       setEnhanceError(null)
+      setPendingEnhanced(null)
       setTimeout(() => {
         const ta = textareaRef.current
         if (!ta) return
@@ -101,16 +105,25 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
     if (!onEnhance || !prompt.trim() || enhancing) return
     setEnhanceError(null)
     setEnhancing(true)
+    setPendingEnhanced(null)
     try {
       const rewritten = await onEnhance(prompt)
       if (rewritten && rewritten.trim()) {
-        setPrompt(rewritten.trim())
+        setPendingEnhanced(rewritten.trim())
       }
     } catch (e) {
       setEnhanceError((e as Error).message)
     } finally {
       setEnhancing(false)
     }
+  }
+
+  const onAcceptEnhanced = (): void => {
+    if (pendingEnhanced) setPrompt(pendingEnhanced)
+    setPendingEnhanced(null)
+  }
+  const onRejectEnhanced = (): void => {
+    setPendingEnhanced(null)
   }
 
   return (
@@ -167,6 +180,32 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
           </div>
           {enhanceError && (
             <p className="text-xs text-red-400">Enhance failed: {enhanceError}</p>
+          )}
+          {pendingEnhanced && (
+            <div className="rounded-md border border-purple-500/60 bg-purple-500/10 p-2 text-xs">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-purple-200">
+                Enhanced rewrite
+              </p>
+              <pre className="whitespace-pre-wrap font-mono text-purple-50">
+                {pendingEnhanced}
+              </pre>
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onRejectEnhanced}
+                  className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] text-neutral-200 hover:bg-neutral-800"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={onAcceptEnhanced}
+                  className="rounded bg-purple-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-purple-500"
+                >
+                  Accept rewrite
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
