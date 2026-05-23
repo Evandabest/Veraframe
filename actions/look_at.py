@@ -90,6 +90,13 @@ def execute(
     inf_strip = inf_track.strips.new(
         name=f"inf_{action_id}", start=max(0, s - 1), action=inf_action
     )
+    # Blender 5.x slot-rebind workaround (see idle.py): without this the
+    # constraint-influence keyframes silently evaluate as zero and the
+    # head-tracking never gates on/off.
+    if hasattr(inf_action, "slots") and len(inf_action.slots):
+        inf_strip.action_slot = inf_action.slots[0]
+        if hasattr(inf_strip, "action_slot_handle"):
+            inf_strip.action_slot_handle = inf_action.slots[0].handle
     inf_strip.blend_type = "ADD"
     inf_strip.extrapolation = "NOTHING"
 

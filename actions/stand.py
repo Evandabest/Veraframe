@@ -54,6 +54,12 @@ def execute(
     lift_track = armature.animation_data.nla_tracks.new()
     lift_track.name = f"veraframe_stand_lift_{action_id}"
     lift_strip = lift_track.strips.new(name=f"lift_{action_id}", start=s, action=lift_action)
+    # Blender 5.x slot-rebind workaround (see idle.py): without this the
+    # ADD strip evaluates as zero and the body never lifts back up.
+    if hasattr(lift_action, "slots") and len(lift_action.slots):
+        lift_strip.action_slot = lift_action.slots[0]
+        if hasattr(lift_strip, "action_slot_handle"):
+            lift_strip.action_slot_handle = lift_action.slots[0].handle
     lift_strip.blend_type = "ADD"
     lift_strip.extrapolation = "HOLD"
 

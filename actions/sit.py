@@ -67,6 +67,13 @@ def execute(
         drop_strip = drop_track.strips.new(
             name=f"drop_{action_id}", start=s, action=drop_action
         )
+        # Blender 5.x slot-rebind workaround (see idle.py for context): if
+        # we don't force-bind the strip's slot + slot_handle here, the
+        # ADD-blend silently evaluates as zero and the body never drops.
+        if hasattr(drop_action, "slots") and len(drop_action.slots):
+            drop_strip.action_slot = drop_action.slots[0]
+            if hasattr(drop_strip, "action_slot_handle"):
+                drop_strip.action_slot_handle = drop_action.slots[0].handle
         drop_strip.blend_type = "ADD"
         drop_strip.extrapolation = "HOLD"
         drop_track_name = drop_track.name
