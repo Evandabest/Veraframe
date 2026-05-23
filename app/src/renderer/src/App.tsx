@@ -3,8 +3,16 @@ import { TimelinePanel, type PendingActionEdit } from './components/TimelinePane
 import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
 import { VerbPalette } from './components/VerbPalette'
+import { TakesPanel } from './components/TakesPanel'
 import { verbByType } from './verbs'
 import { compileScriptToPrompt, parseScript } from './script'
+import {
+  captureTake,
+  deleteTake as deleteTakeFn,
+  renameTake as renameTakeFn,
+  findTake,
+  type Take
+} from './takes'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
 import { EditSceneModal } from './components/EditSceneModal'
@@ -215,6 +223,10 @@ function App(): React.JSX.Element {
   // enabled the textarea is parsed into segments and compiled to a
   // structured prompt the LLM honors verbatim.
   const [scriptMode, setScriptMode] = useState(false)
+  // Takes / branches: snapshots of the timeline + render the user can
+  // flip between non-destructively. Persisted in the project file.
+  const [takes, setTakes] = useState<Take[]>([])
+  const [activeTakeId, setActiveTakeId] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -312,7 +324,46 @@ function App(): React.JSX.Element {
     setPrompt('')
     setMode('mock')
     setState({ status: 'idle' })
+    setTakes([])
+    setActiveTakeId(null)
     // Selections stay — they're driven by the registry which doesn't change.
+  }
+
+  const onSaveTake = (): void => {
+    if (state.status !== 'success') return
+    const t = captureTake(takes, {
+      timeline: state.timeline,
+      renderId: state.renderId,
+      videoUrl: state.videoUrl,
+      durationSec: state.durationSec,
+      prompt
+    })
+    setTakes((prev) => [...prev, t])
+    setActiveTakeId(t.id)
+  }
+
+  const onRestoreTake = (id: string): void => {
+    const t = findTake(takes, id)
+    if (!t) return
+    setState({
+      status: 'success',
+      renderId: t.renderId,
+      videoUrl: t.videoUrl,
+      durationSec: t.durationSec,
+      timeline: t.timeline as Record<string, unknown>,
+      elapsedMs: 0
+    })
+    setPrompt(t.prompt)
+    setActiveTakeId(t.id)
+  }
+
+  const onRenameTake = (id: string, name: string): void => {
+    setTakes((prev) => renameTakeFn(prev, id, name))
+  }
+
+  const onDeleteTake = (id: string): void => {
+    setTakes((prev) => deleteTakeFn(prev, id))
+    if (activeTakeId === id) setActiveTakeId(null)
   }
 
   const onRender = async (): Promise<void> => {
@@ -834,6 +885,16 @@ function App(): React.JSX.Element {
             )
           }
           disabled={isRunning}
+        />
+
+        <TakesPanel
+          takes={takes}
+          activeTakeId={activeTakeId}
+          canSave={state.status === 'success'}
+          onSave={onSaveTake}
+          onRestore={onRestoreTake}
+          onRename={onRenameTake}
+          onDelete={onDeleteTake}
         />
 
         {/* AddCharacterModal lives down below; this is just a placeholder
