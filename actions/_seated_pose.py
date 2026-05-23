@@ -34,3 +34,11 @@ SEATED: dict[str, tuple[float, float, float, float]] = {
 
 
 SEATED_BONES = tuple(SEATED.keys())
+
+# Vertical drop (in armature world units, ~meters for our Mixamo rigs)
+# applied during a sit so the character's body lowers from standing
+# hip height to seated hip height. The leg-bone pose alone doesn't move
+# the hips — without this, the character looks like they're hovering on
+# an invisible chair at standing-hip altitude. Tuned to read well on
+# the bundled X-Bot scale; refine if a different rig sits too high/low.
+SEATED_HIP_DROP_M = 0.45
