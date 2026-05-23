@@ -408,6 +408,45 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
             *_TIMING_PARAMS,
         ),
     ),
+    ActionSpec(
+        name="play_clip",
+        description=(
+            "Play a pre-baked motion clip on a character — anything from a"
+            " user-uploaded FBX (Mixamo dance, a custom kick, a stunt fall,"
+            " etc.). Choose this when no built-in action matches the user's"
+            " description and a `clip` id is available in the catalog."
+        ),
+        params=(
+            ParamSpec(name="character", description="ID of a loaded character."),
+            ParamSpec(
+                name="clip",
+                description=(
+                    "ID of a motion clip in the Available motion clips list"
+                    " below. The clip drives the whole rig for the action's"
+                    " duration."
+                ),
+            ),
+            ParamSpec(
+                name="speed",
+                description=(
+                    "Playback speed multiplier (default 1.0). <1 slows the"
+                    " clip, >1 speeds it up. Only changes how many cycles fit"
+                    " in the window — `start`/`end` always win."
+                ),
+                required=False,
+            ),
+            ParamSpec(
+                name="loop",
+                description=(
+                    "If true, loop the clip when the action window is longer"
+                    " than its natural length. Default false (hold last frame)."
+                ),
+                required=False,
+                enum=("true", "false"),
+            ),
+            *_TIMING_PARAMS,
+        ),
+    ),
 )
 
 

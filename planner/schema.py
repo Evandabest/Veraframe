@@ -89,6 +89,7 @@ class ActionType(StrEnum):
     OVER_SHOULDER = "over_shoulder"
     ORBIT = "orbit"
     SET_LIGHTING = "set_lighting"
+    PLAY_CLIP = "play_clip"
 
 
 class _TimedBase(BaseModel):
@@ -294,6 +295,28 @@ class SetLightingAction(_TimedBase):
     preset: str = Field(min_length=1)
 
 
+class PlayClipAction(_TimedBase):
+    """Play a pre-baked motion clip on a character.
+
+    The clip is a user-supplied FBX/BVH whose embedded animation drives the
+    Mixamo bones for the duration of the action. The clip is identified by
+    a manifest id from the `motions/` asset registry — see
+    `MotionClipManifest`. The action's duration may differ from the clip's
+    natural length; the executor scales playback to fit.
+    """
+
+    type: Literal["play_clip"] = "play_clip"
+    character: str = Field(min_length=1)
+    clip: str = Field(min_length=1)
+    # Playback speed multiplier. 1.0 = clip's natural rate; <1 slows; >1
+    # speeds up. The action's [start, end] always wins — `speed` only
+    # affects how many times the clip cycles inside that window.
+    speed: float = Field(default=1.0, gt=0.0)
+    # When true, loop the clip if its natural length is shorter than the
+    # action window. Otherwise the strip holds the last frame.
+    loop: bool = Field(default=False)
+
+
 Action = Annotated[
     WalkToAction
     | IdleAction
@@ -315,7 +338,8 @@ Action = Annotated[
     | TwoShotAction
     | OverShoulderAction
     | OrbitAction
-    | SetLightingAction,
+    | SetLightingAction
+    | PlayClipAction,
     Field(discriminator="type"),
 ]
 
@@ -387,6 +411,17 @@ _DEFAULT_BONE_MASKS: dict[str, list[BodyPart]] = {
         BodyPart.RIGHT_LEG,
     ],
     "stand": [
+        BodyPart.HEAD,
+        BodyPart.SPINE,
+        BodyPart.LEFT_ARM,
+        BodyPart.RIGHT_ARM,
+        BodyPart.LEFT_LEG,
+        BodyPart.RIGHT_LEG,
+    ],
+    # play_clip is treated as whole-body — until we ship per-bone clip
+    # masking (future work) it's safer to assume it drives every limb so
+    # conflict detection flags overlap with locomotion.
+    "play_clip": [
         BodyPart.HEAD,
         BodyPart.SPINE,
         BodyPart.LEFT_ARM,
