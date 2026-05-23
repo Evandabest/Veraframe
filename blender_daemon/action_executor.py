@@ -442,11 +442,20 @@ def _fill_pose_gaps_with_idle(timeline: dict) -> dict:
         shot_end = float(shot.get("end", 0))
         actions = list(shot.get("actions", []))
 
-        # Collect every character handle that appears in this shot's pose
-        # actions — those are the candidates for gap-fill.
+        # Every character declared in the timeline is a gap-fill candidate
+        # — even ones that have no pose action in this shot. Without this,
+        # a character who is just supposed to "be there" (e.g. listening
+        # while another speaks) renders as Mixamo's T-pose for the whole
+        # shot. Body actions (any pose type) AND any character handle that
+        # appears in any non-pose action in this shot (talk, look_at,
+        # gesture) also count — if the LLM has them doing *something*
+        # they should still have an idle body underneath.
         char_ids: set[str] = set()
+        for declared in timeline.get("characters", []) or []:
+            if isinstance(declared, dict) and declared.get("id"):
+                char_ids.add(str(declared["id"]))
         for a in actions:
-            if a.get("type") in _POSE_ACTION_TYPES and a.get("character"):
+            if a.get("character"):
                 char_ids.add(str(a["character"]))
 
         injected: list[dict] = []

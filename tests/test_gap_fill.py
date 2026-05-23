@@ -144,10 +144,10 @@ def test_face_actions_do_not_block_gap_fill() -> None:
 
 
 def test_face_only_character_gets_full_idle() -> None:
-    # If a character ONLY has face actions, _POSE_ACTION_TYPES filtering means
-    # they're not even seen as having any body actions — we don't inject for
-    # them at all. (Pose-fill only runs for characters that already have at
-    # least one pose action.)
+    # A character with only face actions (no walk/idle/etc.) still needs
+    # body coverage — otherwise the rest of the rig defaults to Mixamo's
+    # T-pose. Gap-fill should drop an idle spanning the whole shot so the
+    # character has a normal standing pose under the face action.
     tl = {
         "shots": [
             {
@@ -161,7 +161,11 @@ def test_face_only_character_gets_full_idle() -> None:
         ]
     }
     out = _fill_pose_gaps_with_idle(tl)
-    assert _injected(out) == []
+    injected = _injected(out)
+    assert len(injected) == 1
+    assert injected[0]["character"] == "alice"
+    assert injected[0]["start"] == 0.0
+    assert injected[0]["end"] == 8.0
 
 
 def test_original_actions_preserved() -> None:
