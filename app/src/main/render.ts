@@ -30,6 +30,15 @@ export interface IncrementalRender {
 
 export type RenderQuality = 'draft' | 'hifi'
 
+/** Per-project style lock. Honored by the daemon as preprocessing: if a
+ *  field is set, the corresponding default is injected into every shot
+ *  unless the user authored an override at the same frame. */
+export interface ProjectStyle {
+  /** Name of a lighting preset from the active scene. Forwarded to a
+   *  default set_lighting action at each shot's start. */
+  lighting?: string
+}
+
 export interface RenderOptions {
   fps?: number
   onProgress?: (event: RenderProgress) => void
@@ -45,6 +54,8 @@ export interface RenderOptions {
    *  current behavior). When true and `repoRoot` is set, each talk action's
    *  text is synthesized to a WAV and muxed into the final MP4. */
   generateAudio?: boolean
+  /** Project-level style lock forwarded to the daemon's execute_timeline. */
+  projectStyle?: ProjectStyle
 }
 
 export interface RenderResult {
@@ -127,7 +138,8 @@ export async function runTimeline(
     timeline,
     asset_paths: assetPaths,
     character_assets: characterAssets,
-    fps
+    fps,
+    project_style: options.projectStyle ?? null
   })) as { executed: unknown[]; skipped: unknown[] }
 
   if (options.incremental) {
