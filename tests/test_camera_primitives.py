@@ -80,16 +80,13 @@ def test_executor_classifies_camera_types() -> None:
     matches our new schema additions — guards against future drift."""
     # Re-import the module-level set by reading the source — simplest way to
     # verify without exposing it as a public symbol.
+    import re
     from pathlib import Path
 
     src = Path("blender_daemon/action_executor.py").read_text()
-    assert '"track_subject"' in src
-    assert '"two_shot"' in src
-    # Both are in the camera_types set that drives the second pass.
-    camera_types_line = [
-        line for line in src.splitlines() if "camera_types = " in line
-    ]
-    assert camera_types_line, "expected a `camera_types = {...}` declaration"
-    line = camera_types_line[0]
+    # Grab the `camera_types = {...}` block (set can be single- or multi-line).
+    match = re.search(r"camera_types\s*=\s*\{([^}]*)\}", src, flags=re.DOTALL)
+    assert match, "expected a `camera_types = {...}` declaration"
+    block = match.group(1)
     for required in ("camera_cut", "camera_dolly", "track_subject", "two_shot", "set_lighting"):
-        assert required in line, f"{required!r} missing from camera_types"
+        assert required in block, f"{required!r} missing from camera_types"
