@@ -4,6 +4,9 @@ import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
 import { VerbPalette } from './components/VerbPalette'
 import { TakesPanel } from './components/TakesPanel'
+import { RangeEditPanel } from './components/RangeEditPanel'
+import { mergeRangeEdit } from './range-edit'
+import type { Timeline as TimelineFull, TimelineAction as TLAction } from './timeline-types'
 import { verbByType } from './verbs'
 import { compileScriptToPrompt, parseScript } from './script'
 import {
@@ -227,6 +230,11 @@ function App(): React.JSX.Element {
   // flip between non-destructively. Persisted in the project file.
   const [takes, setTakes] = useState<Take[]>([])
   const [activeTakeId, setActiveTakeId] = useState<string | null>(null)
+  // Natural-language range edit (Step 48). `selectedRange` is set by a
+  // shift+drag on the timeline; the prompt panel shows whenever it's set.
+  const [selectedRange, setSelectedRange] = useState<{ start: number; end: number } | null>(null)
+  const [rangeEditing, setRangeEditing] = useState(false)
+  const [rangeEditError, setRangeEditError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -367,6 +375,90 @@ function App(): React.JSX.Element {
   const onDeleteTake = (id: string): void => {
     setTakes((prev) => deleteTakeFn(prev, id))
     if (activeTakeId === id) setActiveTakeId(null)
+  }
+
+  const onCancelRangeEdit = (): void => {
+    setSelectedRange(null)
+    setRangeEditError(null)
+    setRangeEditing(false)
+  }
+
+  const onSubmitRangeEdit = async (promptText: string): Promise<void> => {
+    if (!selectedRange || state.status !== 'success') return
+    if (selectedRange.end <= selectedRange.start + 0.1) {
+      setRangeEditError('Range is too short — drag a wider window.')
+      return
+    }
+    const tlBefore = state.timeline as unknown as TimelineFull
+    setRangeEditing(true)
+    setRangeEditError(null)
+
+    const response = await window.veraframe.editRange({
+      prompt: promptText,
+      scene: tlBefore.scene,
+      start: selectedRange.start,
+      end: selectedRange.end,
+      timelineContext: state.timeline,
+      provider,
+      model: model.trim() || undefined
+    })
+
+    if (!response.ok) {
+      setRangeEditError(response.error)
+      setRangeEditing(false)
+      return
+    }
+
+    let merged: ReturnType<typeof mergeRangeEdit>
+    try {
+      merged = mergeRangeEdit(
+        tlBefore,
+        selectedRange,
+        response.actions as unknown as TLAction[]
+      )
+    } catch (err) {
+      setRangeEditError((err as Error).message)
+      setRangeEditing(false)
+      return
+    }
+
+    // Splice the changed window into the existing video. The new actions
+    // all live in [selectedRange.start, selectedRange.end] by construction
+    // (the subprocess clamps them), so a splice covers the right slice.
+    const previousRenderId = state.renderId
+    const previousDurationSec = state.durationSec
+    const startedAt = Date.now()
+    setState({ status: 'running', startedAt })
+    const renderResp = await window.veraframe.render({
+      mode: 'direct',
+      timeline: merged.timeline as unknown as Record<string, unknown>,
+      incremental: {
+        previousRenderId,
+        changedWindow: { start: selectedRange.start, end: selectedRange.end },
+        operation: 'splice'
+      },
+      quality,
+      generateAudio,
+      projectStyle
+    })
+    const elapsedMs = Date.now() - startedAt
+    setRangeEditing(false)
+
+    if (renderResp.ok) {
+      setState({
+        status: 'success',
+        renderId: renderResp.renderId,
+        videoUrl: renderResp.videoUrl,
+        durationSec: renderResp.durationSec || previousDurationSec,
+        timeline: renderResp.timeline,
+        elapsedMs
+      })
+      setSelectedRange(null)
+      setActiveTakeId(null)
+    } else {
+      setState({ status: 'error', message: renderResp.error, elapsedMs })
+      setRangeEditError(renderResp.error)
+    }
   }
 
   const onRender = async (): Promise<void> => {
@@ -1238,7 +1330,16 @@ function App(): React.JSX.Element {
                 onAddCharacter={openAddCharacter}
                 onRetimeAction={onRetimeAction}
                 onPaletteDrop={onPaletteDrop}
+                selectedRange={selectedRange}
+                onRangeSelect={setSelectedRange}
                 pendingEdit={pendingEditForPanel}
+              />
+              <RangeEditPanel
+                range={selectedRange}
+                generating={rangeEditing}
+                error={rangeEditError}
+                onCancel={onCancelRangeEdit}
+                onSubmit={onSubmitRangeEdit}
               />
             </>
           )}
