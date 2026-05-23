@@ -201,6 +201,7 @@ function App(): React.JSX.Element {
   }, [provider])
   const [state, setState] = useState<RenderState>({ status: 'idle' })
   const [quality, setQuality] = useState<'draft' | 'hifi'>('hifi')
+  const [generateAudio, setGenerateAudio] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -311,7 +312,8 @@ function App(): React.JSX.Element {
       selectedScene: mode === 'llm' ? selectedSceneId ?? undefined : undefined,
       selectedCharacters:
         mode === 'llm' && selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
-      quality
+      quality,
+      generateAudio
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -503,7 +505,8 @@ function App(): React.JSX.Element {
       mode: 'direct',
       timeline: tl as unknown as Record<string, unknown>,
       incremental,
-      quality
+      quality,
+      generateAudio
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -572,7 +575,8 @@ function App(): React.JSX.Element {
       mode: 'direct',
       timeline: tl as unknown as Record<string, unknown>,
       incremental,
-      quality
+      quality,
+      generateAudio
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -634,7 +638,8 @@ function App(): React.JSX.Element {
     const response = await window.veraframe.render({
       mode: 'direct',
       timeline: tl as unknown as Record<string, unknown>,
-      quality
+      quality,
+      generateAudio
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -959,6 +964,19 @@ function App(): React.JSX.Element {
                 </button>
               ))}
             </div>
+            <label
+              className="inline-flex items-center gap-1.5 text-xs text-neutral-300"
+              title="Synthesize voice audio for every talk action and mux into the MP4. Needs OPENAI_API_KEY set."
+            >
+              <input
+                type="checkbox"
+                checked={generateAudio}
+                onChange={(e) => setGenerateAudio(e.target.checked)}
+                disabled={isRunning}
+                className="h-3 w-3 accent-blue-500"
+              />
+              Voice
+            </label>
           </div>
         </section>
         </div>
