@@ -453,11 +453,13 @@ app.whenReady().then(async () => {
         provider?: LLMProvider
         model?: string
       }
-    ): Promise<{ ok: true; action: Record<string, unknown> } | { ok: false; error: string }> => {
+    ): Promise<
+      { ok: true; actions: Record<string, unknown>[] } | { ok: false; error: string }
+    > => {
       if (!assets) return { ok: false, error: 'asset registry not loaded' }
       if (!request.prompt?.trim()) return { ok: false, error: 'prompt is empty' }
       try {
-        const action = await runActionGen(
+        const result = await runActionGen(
           request.prompt,
           resolveRepoRoot(),
           assets.assetsDir,
@@ -471,7 +473,7 @@ app.whenReady().then(async () => {
           },
           { provider: request.provider, model: request.model }
         )
-        return { ok: true, action }
+        return { ok: true, actions: result.actions }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }

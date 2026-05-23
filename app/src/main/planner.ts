@@ -153,7 +153,7 @@ export function runActionGen(
   assetsDir: string,
   actionCtx: ActionGenContext,
   options: PlannerOptions = {}
-): Promise<Record<string, unknown>> {
+): Promise<{ actions: Record<string, unknown>[] }> {
   const extraArgs = [
     '--scene', actionCtx.scene,
     '--character', actionCtx.character,
@@ -164,13 +164,13 @@ export function runActionGen(
   if (actionCtx.end !== undefined) {
     extraArgs.push('--end', String(actionCtx.end))
   }
-  return runPythonEntry<Record<string, unknown>>(
+  return runPythonEntry<{ actions: Record<string, unknown>[] }>(
     'planner.run_action',
     prompt,
     repoRoot,
     assetsDir,
     options,
-    (stdout) => JSON.parse(stdout) as Record<string, unknown>,
+    (stdout) => JSON.parse(stdout) as { actions: Record<string, unknown>[] },
     extraArgs
   )
 }

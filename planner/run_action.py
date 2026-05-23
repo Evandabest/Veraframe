@@ -1,9 +1,11 @@
-"""Stdout entrypoint that generates a single Action for an existing block on
-the timeline.
+"""Stdout entrypoint that generates Action(s) for a block on the timeline.
 
-The Electron app calls this when the user edits a block via a re-prompt. The
-character handle, start/end window, and action id are FIXED by the caller; the
-LLM only chooses the action type and its parameters.
+The Electron app calls this when the user edits or adds an action via a
+re-prompt. The character handle, start time, and action-id prefix are
+FIXED by the caller; the LLM chooses action types and parameters and may
+return more than one action when the user's description has concurrent
+beats (e.g. "sit and face the camera" → a `sit` on the body channel
+plus a `turn_to` on the rotation channel).
 
 Usage:
 
@@ -17,7 +19,8 @@ Usage:
       --end 6.0 \\
       --context-json '{"characters": [...], "shots": [...]}'
 
-Stdout: JSON of the generated Action (matching planner.schema.Action).
+Stdout: JSON `{"actions": [...]}` — one or more Actions matching the
+schema. The Electron caller is responsible for inserting all of them.
 Stderr: free-form progress.
 """
 
@@ -35,33 +38,38 @@ from planner.llm_client import LLMConfig
 from planner.registry import Registry
 from planner.schema import Action
 
-SYSTEM_PROMPT_TEMPLATE = """You generate a SINGLE animation action for the Veraframe timeline.
+SYSTEM_PROMPT_TEMPLATE = """You generate one or more animation actions for the Veraframe timeline.
 
 You will be given:
 - The registry of available scenes, characters, and action types.
-- The active scene id, the character handle, and the time window the action must fill.
+- The active scene id, the character handle, and the time window the actions must fill.
 - (Optionally) the rest of the timeline as context so you can reference other characters or coordinate behaviour.
 - A user instruction describing what the character should do during this time slot.
 
-Output a JSON object containing ONE action that conforms to the action schema. The action's `character`, `start`, `end`, and `id` will be OVERWRITTEN by the caller — so you may put any plausible values there; what matters is the `type` and its type-specific parameters.
+Output a JSON object `{"actions": [...]}`. Each item's `character`, `start`, `end`, and `id` will be OVERWRITTEN by the caller — so you may put any plausible values there; what matters is each action's `type` and type-specific parameters.
 
 {registry_section}
 
 # Rules
 
-- Pick exactly one action type from the available actions list.
+- Most prompts map to ONE action. Emit multiple actions only when the user describes truly concurrent beats on different channels (e.g. "sit and face the camera" → `sit` for the body + `turn_to` for the rotation; "walk to the door while talking" → `walk_to` + `talk`). Do NOT split a single intent across two actions to look thorough.
+- The channels that compose concurrently for the same character: body (sit / stand / idle / walk_to / play_clip — pick one), talk, look_at, point_at, gestures (wave / nod / shake_head), face (smile / frown / blink). Two actions in the same channel at the same time = invalid.
 - For target / look_at fields, refer to either a spawn point in the active scene or another character handle from the context. **NEVER use a camera preset name** as a target. If the user wrote "face the camera" / "turn to the camera", pick a character handle from the context that the camera is roughly framing; if none fits, prefer a head-only `look_at` over a body-rotating `turn_to`, or skip the rotation entirely.
 - **Seated state.** If the character is currently in a held `sit` (the timeline shows a prior `sit` action with no subsequent `stand`) and the user says "stay seated" / "remain sitting" / "sit there", emit another `sit` — NOT `idle`. `idle` is a standing pose and would visibly pop the character out of the chair. Only emit `stand` when the user explicitly wants the character to get up.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
-- Output a JSON object with exactly one top-level key `action`. The value is the action object. No prose, no commentary."""
+- Output a JSON object with exactly one top-level key `actions` — a non-empty list. No prose, no commentary."""
 
 
 class ActionResponse(BaseModel):
-    """LLM response wrapper — a single field whose schema is the discriminated
-    Action union. Wrapping in a parent object makes structured output more
-    reliable across providers than asking for a union at the top level."""
+    """LLM response wrapper.
 
-    action: Action
+    A list of Actions so the caller can request truly concurrent beats
+    (sit + turn_to, walk_to + talk) in a single call. Most prompts still
+    map to a single-element list. Wrapping the list in a parent object
+    makes structured output reliable across providers.
+    """
+
+    actions: list[Action]
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -141,26 +149,35 @@ def main(argv: list[str] | None = None) -> int:
     print(content, file=sys.stderr)
     wrapped = ActionResponse.model_validate_json(content)
 
-    # Overwrite the fields the caller has authority over. Start and id and
-    # character are always forced. End is only forced when the caller provided
-    # one (edit flow); otherwise we keep the LLM's chosen end after a sanity
-    # check.
-    payload = wrapped.action.model_dump()
-    payload["id"] = args.action_id
-    payload["character"] = args.character
-    payload["start"] = args.start
-    if args.end is not None:
-        payload["end"] = args.end
-    if payload["end"] <= payload["start"]:
-        print(
-            f"[run_action] LLM picked end={payload['end']} <= start={payload['start']};"
-            " falling back to start + 2s",
-            file=sys.stderr,
-        )
-        payload["end"] = payload["start"] + 2.0
-    final = TypeAdapter(Action).validate_python(payload)
+    if not wrapped.actions:
+        print("[run_action] LLM returned an empty actions list", file=sys.stderr)
+        return 1
 
-    sys.stdout.write(json.dumps(final.model_dump(mode="json")) + "\n")
+    # Overwrite the fields the caller has authority over. Start, character,
+    # and id are always forced. End is only forced when the caller provided
+    # one (edit flow); otherwise we keep the LLM's chosen end after a
+    # sanity check. The caller's --action-id is the BASE — when the LLM
+    # returns multiple actions we suffix `_2`, `_3`, … so each is unique.
+    finals = []
+    for index, action in enumerate(wrapped.actions):
+        payload = action.model_dump()
+        payload["id"] = args.action_id if index == 0 else f"{args.action_id}_{index + 1}"
+        payload["character"] = args.character
+        payload["start"] = args.start
+        if args.end is not None:
+            payload["end"] = args.end
+        if payload["end"] <= payload["start"]:
+            print(
+                f"[run_action] LLM picked end={payload['end']} <= start={payload['start']};"
+                " falling back to start + 2s",
+                file=sys.stderr,
+            )
+            payload["end"] = payload["start"] + 2.0
+        finals.append(TypeAdapter(Action).validate_python(payload))
+
+    sys.stdout.write(
+        json.dumps({"actions": [a.model_dump(mode="json") for a in finals]}) + "\n"
+    )
     return 0
 
 

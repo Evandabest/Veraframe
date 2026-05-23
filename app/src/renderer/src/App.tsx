@@ -771,13 +771,17 @@ function App(): React.JSX.Element {
     initialPrompt?: string
   }
   const [editor, setEditor] = useState<EditorTarget | null>(null)
-  const [pendingAction, setPendingAction] = useState<TimelineAction | null>(null)
+  // The LLM may return multiple concurrent actions for a single add /
+  // edit request — e.g. "sit and face the camera" → sit + turn_to on
+  // different channels. We treat them as a unit: all preview together,
+  // all commit together on Accept.
+  const [pendingActions, setPendingActions] = useState<TimelineAction[]>([])
   const [generatingAction, setGeneratingAction] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const closeEditor = (): void => {
     setEditor(null)
-    setPendingAction(null)
+    setPendingActions([])
     setActionError(null)
     setGeneratingAction(false)
   }
@@ -789,7 +793,7 @@ function App(): React.JSX.Element {
       endSec: action.end, // locked for edits
       original: action
     })
-    setPendingAction(null)
+    setPendingActions([])
     setActionError(null)
   }
 
@@ -798,7 +802,7 @@ function App(): React.JSX.Element {
     // No pre-determined end — the LLM picks a sensible duration based on the
     // action type it chooses (1-2s for face expressions, 3-5s for walks, etc).
     setEditor({ laneId, startSec, endSec: null, original: null })
-    setPendingAction(null)
+    setPendingActions([])
     setActionError(null)
   }
 
@@ -816,7 +820,7 @@ function App(): React.JSX.Element {
       original: null,
       initialPrompt: verb.promptSeed
     })
-    setPendingAction(null)
+    setPendingActions([])
     setActionError(null)
     setVerbPaletteOpen(false)
   }
@@ -846,7 +850,7 @@ function App(): React.JSX.Element {
     })
     setGeneratingAction(false)
     if (response.ok) {
-      setPendingAction(response.action as TimelineAction)
+      setPendingActions(response.actions as TimelineAction[])
       setPendingActionPrompt(promptText)
     } else {
       setActionError(response.error)
@@ -854,7 +858,7 @@ function App(): React.JSX.Element {
   }
 
   const onAcceptAction = async (): Promise<void> => {
-    if (!editor || !pendingAction || state.status !== 'success') return
+    if (!editor || pendingActions.length === 0 || state.status !== 'success') return
     const previousRenderId = state.renderId
     const previousDurationSec = state.durationSec
     const tl = JSON.parse(JSON.stringify(state.timeline)) as MutableTimeline
@@ -865,16 +869,23 @@ function App(): React.JSX.Element {
       return
     }
     if (editor.original) {
+      // Edit flow: the original action is replaced by the FIRST returned
+      // action; any extras are appended (rare — the LLM usually returns
+      // just one when editing an existing block).
+      const [head, ...rest] = pendingActions
       targetShot.actions = targetShot.actions.map((a) =>
-        a.id === editor.original!.id ? pendingAction : a
+        a.id === editor.original!.id ? head : a
       )
+      if (rest.length > 0) targetShot.actions = [...targetShot.actions, ...rest]
     } else {
-      targetShot.actions = [...targetShot.actions, pendingAction]
+      // Add flow: append all returned actions.
+      targetShot.actions = [...targetShot.actions, ...pendingActions]
     }
-    // Grow the shot if the new action extends past the current end so the
-    // render pipeline derives a larger durationSec.
-    if (pendingAction.end > targetShot.end) {
-      targetShot.end = pendingAction.end
+    // Grow the shot if any added action extends past the current end so
+    // the render pipeline derives a larger durationSec.
+    const maxEnd = Math.max(...pendingActions.map((a) => a.end))
+    if (maxEnd > targetShot.end) {
+      targetShot.end = maxEnd
     }
     // Append the new beat's prompt to the scene prompt at the top so a
     // future full Render reproduces this addition. Skip on the edit
@@ -896,17 +907,21 @@ function App(): React.JSX.Element {
     // - Adding new content past the previous video's end → append the tail.
     // - Editing inside the existing video (or filling an inner gap)
     //   → splice the changed window into the previous video.
+    // Splice / append window spans every pending action so the
+    // re-render covers them all in one go.
+    const minStart = Math.min(...pendingActions.map((a) => a.start))
+    const maxEndForRender = Math.max(...pendingActions.map((a) => a.end))
     const isExtension =
-      !editor.original && pendingAction.start >= previousDurationSec - 0.05
+      !editor.original && minStart >= previousDurationSec - 0.05
     const incremental = isExtension
       ? {
           previousRenderId,
-          changedWindow: { start: previousDurationSec, end: pendingAction.end },
+          changedWindow: { start: previousDurationSec, end: maxEndForRender },
           operation: 'append' as const
         }
       : {
           previousRenderId,
-          changedWindow: { start: pendingAction.start, end: pendingAction.end },
+          changedWindow: { start: minStart, end: maxEndForRender },
           operation: 'splice' as const
         }
 
@@ -937,7 +952,7 @@ function App(): React.JSX.Element {
   }
 
   const onRejectAction = (): void => {
-    setPendingAction(null)
+    setPendingActions([])
     setActionError(null)
   }
 
@@ -1073,11 +1088,15 @@ function App(): React.JSX.Element {
     }
   }
 
+  // Preview the FIRST pending action on the timeline (typically the
+  // body-channel one when the LLM returned multiple concurrent beats).
+  // The remaining pending actions are still visible in the ActionEditor's
+  // JSON list and all get committed together on Accept.
   const pendingEditForPanel: PendingActionEdit | null =
-    editor && pendingAction
+    editor && pendingActions.length > 0
       ? {
           originalActionId: editor.original?.id ?? null,
-          newAction: pendingAction,
+          newAction: pendingActions[0],
           laneId: editor.laneId
         }
       : null
@@ -1649,7 +1668,7 @@ function App(): React.JSX.Element {
         laneId={editor?.laneId ?? ''}
         startSec={editor?.startSec ?? 0}
         endSec={editor?.endSec ?? null}
-        pendingAction={pendingAction}
+        pendingActions={pendingActions}
         generating={generatingAction}
         error={actionError}
         initialPrompt={editor?.initialPrompt}

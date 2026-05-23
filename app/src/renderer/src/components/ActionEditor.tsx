@@ -31,7 +31,9 @@ export interface ActionEditorProps {
   /** Locked end time (edit flow). Null = LLM chooses duration. */
   endSec: number | null
   /** Filled in by App after the LLM call returns. */
-  pendingAction: ActionLike | null
+  /** One or more actions the LLM proposed. The first is highlighted on
+   *  the timeline; all of them commit together on Accept. */
+  pendingActions: ActionLike[]
   /** True while the LLM call is in-flight. */
   generating: boolean
   /** Surfaces LLM/IPC errors. */
@@ -56,7 +58,7 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
     laneId,
     startSec,
     endSec,
-    pendingAction,
+    pendingActions,
     generating,
     error,
     onGenerate,
@@ -94,7 +96,8 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
 
   if (!open) return null
 
-  const submitDisabled = !prompt.trim() || generating || pendingAction !== null
+  const hasPending = pendingActions.length > 0
+  const submitDisabled = !prompt.trim() || generating || hasPending
   const flowLabel = original ? 'Edit action' : 'Add action'
   const timeLabel =
     endSec !== null
@@ -211,23 +214,29 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
 
         {error && <p className="text-xs text-red-400">{error}</p>}
 
-        {pendingAction && (
+        {hasPending && (
           <div className="rounded-md border border-emerald-500/60 bg-emerald-500/10 p-3">
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
-              Proposed
+              Proposed {pendingActions.length > 1 ? `(${pendingActions.length} concurrent actions)` : ''}
             </p>
             <pre className="overflow-x-auto font-mono text-xs text-emerald-50">
-              {JSON.stringify(pendingAction, null, 2)}
+              {JSON.stringify(
+                pendingActions.length === 1 ? pendingActions[0] : pendingActions,
+                null,
+                2
+              )}
             </pre>
             <p className="mt-2 text-[11px] text-emerald-200/70">
-              The new block is highlighted in green on the timeline behind this dialog.
+              {pendingActions.length > 1
+                ? 'These actions run concurrently (different channels). All commit together on Accept.'
+                : 'The new block is highlighted in green on the timeline behind this dialog.'}{' '}
               Accept to re-render the video; Reject to keep the original.
             </p>
           </div>
         )}
 
         <footer className="flex items-center justify-end gap-2">
-          {pendingAction ? (
+          {hasPending ? (
             <>
               <button
                 type="button"

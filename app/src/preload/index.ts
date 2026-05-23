@@ -269,7 +269,7 @@ export interface GenerateActionRequest {
 }
 
 export type GenerateActionResponse =
-  | { ok: true; action: Record<string, unknown> }
+  | { ok: true; actions: Record<string, unknown>[] }
   | { ok: false; error: string }
 
 export interface BreakdownScreenplayRequest {
