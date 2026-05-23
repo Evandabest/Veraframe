@@ -117,7 +117,8 @@ const ACTION_COLORS: Record<string, [string, string]> = {
   two_shot: ['bg-sky-600/70', 'border-sky-400'],
   over_shoulder: ['bg-sky-500/60', 'border-sky-400'],
   orbit: ['bg-sky-500/40', 'border-sky-400'],
-  set_lighting: ['bg-yellow-600/70', 'border-yellow-400']
+  set_lighting: ['bg-yellow-600/70', 'border-yellow-400'],
+  play_clip: ['bg-fuchsia-600/70', 'border-fuchsia-400']
 }
 const DEFAULT_COLORS: [string, string] = ['bg-neutral-700/70', 'border-neutral-500']
 

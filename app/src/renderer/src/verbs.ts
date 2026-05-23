@@ -21,6 +21,7 @@ export type VerbFamily =
   | 'speech'
   | 'camera'
   | 'stage'
+  | 'motion'
 
 export interface VerbDef {
   /** Matches `ActionType` from the schema. */
@@ -238,6 +239,19 @@ export const VERB_FAMILIES: VerbFamilyDef[] = [
         scene: true
       }
     ]
+  },
+  {
+    id: 'motion',
+    label: 'Motion clip',
+    verbs: [
+      {
+        type: 'play_clip',
+        label: 'play_clip',
+        description: 'Play a pre-baked motion clip on a character (Mixamo dance, custom kick, etc.)',
+        promptSeed: 'play the ',
+        scene: false
+      }
+    ]
   }
 ]
 
@@ -264,7 +278,8 @@ export const KNOWN_ACTION_TYPES: readonly string[] = [
   'two_shot',
   'over_shoulder',
   'orbit',
-  'set_lighting'
+  'set_lighting',
+  'play_clip'
 ]
 
 export function allVerbs(): VerbDef[] {
