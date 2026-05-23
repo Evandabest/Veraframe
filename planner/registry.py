@@ -99,6 +99,19 @@ _TIMING_PARAMS = (
 _EMOTION_VALUES = tuple(e.value for e in Emotion)
 _WALK_STYLE_VALUES = tuple(s.value for s in WalkStyle)
 _IDLE_STYLE_VALUES = tuple(s.value for s in IdleStyle)
+_BODY_PART_VALUES = ("head", "spine", "left_arm", "right_arm", "left_leg", "right_leg", "face")
+_BONE_MASK_PARAM = ParamSpec(
+    name="bone_mask",
+    description=(
+        "Optional list of body parts this gesture should drive. Defaults to the"
+        " action's natural region (wave -> right_arm, nod/shake_head -> head,"
+        " point_at -> right_arm). Override to layer gestures over locomotion"
+        " on different limbs (e.g. wave with bone_mask=['left_arm'] while the"
+        " character walk_to's somewhere)."
+    ),
+    required=False,
+    enum=_BODY_PART_VALUES,
+)
 
 DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
@@ -170,10 +183,15 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
     ),
     ActionSpec(
         name="point_at",
-        description="Make a character point at a target with their hand.",
+        description=(
+            "Make a character point at a target with their hand. Drives the"
+            " right_arm by default — set bone_mask=['left_arm'] for a"
+            " left-handed point."
+        ),
         params=(
             ParamSpec(name="character", description="ID of a loaded character."),
             ParamSpec(name="target", description="Spawn point or other character ID to point at."),
+            _BONE_MASK_PARAM,
             *_TIMING_PARAMS,
         ),
     ),
@@ -249,10 +267,12 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
         name="nod",
         description=(
             "Yes-nod: a short vertical head-bone pitch oscillation. Good for "
-            "agreement, acknowledgement, or thanks. ~0.5-1.5s typical."
+            "agreement, acknowledgement, or thanks. ~0.5-1.5s typical. Drives the"
+            " head bone only — safe to layer over walk_to / idle."
         ),
         params=(
             ParamSpec(name="character", description="ID of a loaded character."),
+            _BONE_MASK_PARAM,
             *_TIMING_PARAMS,
         ),
     ),
@@ -260,10 +280,12 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
         name="shake_head",
         description=(
             "No-shake: a short horizontal head-bone yaw oscillation. Disagreement, "
-            "refusal, disbelief. ~0.5-1.5s typical."
+            "refusal, disbelief. ~0.5-1.5s typical. Drives the head bone only —"
+            " safe to layer over walk_to / idle."
         ),
         params=(
             ParamSpec(name="character", description="ID of a loaded character."),
+            _BONE_MASK_PARAM,
             *_TIMING_PARAMS,
         ),
     ),
@@ -272,7 +294,9 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
         description=(
             "A friendly wave with the right arm. The upper arm raises and the "
             "forearm oscillates. ~1.5-3s typical. Pair with look_at(target) for "
-            "directional waves."
+            "directional waves. Drives the right_arm by default — can be laid"
+            " over walk_to / idle (the pose-keyframes override the FBX cycle on"
+            " the right arm). Set bone_mask=['left_arm'] for a left-handed wave."
         ),
         params=(
             ParamSpec(name="character", description="ID of a loaded character."),
@@ -281,6 +305,7 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
                 description="Spawn point or character ID being waved at (optional).",
                 required=False,
             ),
+            _BONE_MASK_PARAM,
             *_TIMING_PARAMS,
         ),
     ),
