@@ -357,11 +357,8 @@ function App(): React.JSX.Element {
     setActiveTakeId(null)
     setFrozenActionIds(p.frozenActionIds ?? [])
     if (p.timeline && response.videoSidecar) {
-      // Sidecar present — load the pre-rendered MP4 directly and skip
-      // the LLM-free re-render. Saves 10-30s on every project open and
-      // keeps the exact video the user saved (including any TTS audio
-      // muxed in at save time, which a re-render wouldn't reproduce
-      // unless the Voice toggle is still on).
+      // Sidecar present — load the pre-rendered MP4 directly. No re-
+      // render, the user can edit immediately.
       const tlAny = p.timeline as unknown as { shots?: Array<{ end?: number }> }
       const durationSec = Math.max(
         0,
@@ -376,35 +373,17 @@ function App(): React.JSX.Element {
         elapsedMs: 0
       })
       setProjectNote(`Loaded project (using saved video — no re-render).`)
-    } else if (p.timeline) {
-      // No sidecar — fall back to the pre-Step-XX behavior: re-render the
-      // stored timeline so the user still gets a video back.
-      const startedAt = Date.now()
-      setState({ status: 'running', startedAt })
-      const renderResp = await window.veraframe.render({
-        mode: 'direct',
-        timeline: p.timeline,
-        quality,
-        projectStyle,
-        physicsPostPass
-      })
-      const elapsedMs = Date.now() - startedAt
-      if (renderResp.ok) {
-        setState({
-          status: 'success',
-          renderId: renderResp.renderId,
-          videoUrl: renderResp.videoUrl,
-          durationSec: renderResp.durationSec,
-          timeline: renderResp.timeline,
-          elapsedMs
-        })
-      } else {
-        setState({ status: 'error', message: renderResp.error, elapsedMs })
-        setProjectNote(`Loaded project but re-render failed: ${renderResp.error}`)
-      }
     } else {
+      // No sidecar (legacy project, or never saved with one). Don't
+      // auto-render — that locks the UI and the user might want to
+      // change render flags (Voice, quality, foot-lock) before
+      // re-materializing the video. Land in idle with a helpful note.
       setState({ status: 'idle' })
-      setProjectNote(`Loaded project (no saved timeline — click Render to materialize).`)
+      setProjectNote(
+        p.timeline
+          ? `Loaded project. Click Render when you're ready (adjust Voice / Draft / Hi-fi / Foot-lock first if needed).`
+          : `Loaded project (no saved timeline — click Render to materialize).`
+      )
     }
   }
 
