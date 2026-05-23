@@ -346,6 +346,30 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
         ),
     ),
     ActionSpec(
+        name="orbit",
+        description=(
+            "Sweep the active camera in a circle around `target`. Positive "
+            "`degrees` rotates counterclockwise (viewed from above). Camera "
+            "tracks the target throughout. Typical use: a 30-90 degree reveal "
+            "around a character or object."
+        ),
+        params=(
+            ParamSpec(
+                name="target",
+                description="Spawn point name or character handle the camera circles.",
+            ),
+            ParamSpec(
+                name="degrees",
+                description=(
+                    "Arc swept over the action duration. Positive = counterclockwise "
+                    "from above. Defaults to 90."
+                ),
+                required=False,
+            ),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
         name="set_lighting",
         description="Switch the scene's lighting to a named preset.",
         params=(

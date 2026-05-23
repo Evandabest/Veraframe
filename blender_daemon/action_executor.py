@@ -22,6 +22,7 @@ from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
 from actions import nod as nod_action
+from actions import orbit as orbit_action
 from actions import over_shoulder as over_shoulder_action
 from actions import point_at as point_at_action
 from actions import set_lighting as set_lighting_action
@@ -151,6 +152,8 @@ def execute_timeline(
             _dispatch_two_shot(action, characters, fps, executed, skipped)
         elif atype == "over_shoulder":
             _dispatch_over_shoulder(action, characters, fps, executed, skipped)
+        elif atype == "orbit":
+            _dispatch_orbit(action, characters, fps, executed, skipped)
         elif atype == "set_lighting":
             _dispatch_set_lighting(action, fps, executed, skipped)
         else:
@@ -826,6 +829,45 @@ def _dispatch_two_shot(
         skipped.append({"id": action_id, "type": "two_shot", "reason": str(e)})
         return
     executed.append({"id": action_id, "type": "two_shot", **result})
+
+
+def _dispatch_orbit(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    target_name = action.get("target")
+    if not target_name:
+        skipped.append({"id": action_id, "type": "orbit", "reason": "no target"})
+        return
+    # Target can be a character handle OR a scene spawn-point Empty by name.
+    target_obj = characters.get(target_name)
+    if target_obj is None:
+        scene = bpy.context.scene
+        target_obj = scene.objects.get(target_name)
+    if target_obj is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "orbit",
+                "reason": f"target '{target_name}' not found as character or scene object",
+            }
+        )
+        return
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    degrees = float(action.get("degrees", 90.0))
+    try:
+        result = orbit_action.execute(
+            target_obj, start_frame, end_frame, degrees, action_id=action_id
+        )
+    except orbit_action.OrbitError as e:
+        skipped.append({"id": action_id, "type": "orbit", "reason": str(e)})
+        return
+    executed.append({"id": action_id, "type": "orbit", **result})
 
 
 def _dispatch_over_shoulder(
