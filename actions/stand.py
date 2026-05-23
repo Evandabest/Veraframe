@@ -97,23 +97,27 @@ def _build_stand_action(armature, action_id: str, start_frame: int, end_frame: i
 
 
 def _build_hip_lift_action(action_id: str, start_frame: int, end_frame: int):
-    """Keyframe armature.location.z from -SEATED_HIP_DROP_M back to 0
+    """Keyframe object.location.z from -SEATED_HIP_DROP_M back to 0
     so the character lifts out of a seated drop a prior `sit` applied.
 
-    Same pattern as sit's drop action — two LINEAR keyframes on the z
-    curve, x and y stay at 0 so the ADD blend doesn't move the character
-    horizontally.
+    Same temp-Empty pattern as sit._build_hip_drop_action and
+    walk_to._make_location_action — Blender 5.x's slotted-action API
+    needs the keyframes to be inserted via an object, not constructed
+    directly on action.fcurves.
     """
     lift_action = bpy.data.actions.new(name=f"veraframe_stand_lift_{action_id}_a")
-    for axis in range(3):
-        fc = lift_action.fcurves.new(data_path="location", index=axis)
-        kp0 = fc.keyframe_points.insert(
-            frame=float(start_frame),
-            value=(SEATED_HIP_DROP_M if axis == 2 else 0.0),
-        )
-        kp1 = fc.keyframe_points.insert(frame=float(end_frame), value=0.0)
-        kp0.interpolation = "LINEAR"
-        kp1.interpolation = "LINEAR"
+    dummy = bpy.data.objects.new(f"veraframe_stand_lift_source_{action_id}", None)
+    bpy.context.scene.collection.objects.link(dummy)
+    try:
+        dummy.animation_data_create()
+        dummy.animation_data.action = lift_action
+        for axis_index in range(3):
+            dummy.location[axis_index] = SEATED_HIP_DROP_M if axis_index == 2 else 0.0
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=start_frame)
+            dummy.location[axis_index] = 0.0
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=end_frame)
+    finally:
+        bpy.data.objects.remove(dummy, do_unlink=True)
     return lift_action
 
 

@@ -105,28 +105,27 @@ def _build_sit_action(armature, action_id: str, start_frame: int, end_frame: int
 
 
 def _build_hip_drop_action(action_id: str, start_frame: int, end_frame: int):
-    """Keyframe armature.location.z from 0 down to -SEATED_HIP_DROP_M.
+    """Keyframe object.location.z from 0 down to -SEATED_HIP_DROP_M.
 
-    Built on a temp empty object so we can keyframe the location channel
-    without touching the armature's tweak slot or any pose-bone state.
-    The Action will be applied to the armature via the NLA strip — only
-    the location curves matter; Blender ignores object-type-mismatched
-    channels when the strip runs against the armature.
+    Mirrors walk_to._make_location_action: build the curves on a temp
+    Empty so Blender 5.x's slotted-action machinery sets up the
+    slot/layer/strip/channelbag for us. We then remove the Empty and
+    apply the Action to the armature via an ADD-blend NLA strip — only
+    the location channels matter on the armature.
     """
     drop_action = bpy.data.actions.new(name=f"veraframe_sit_drop_{action_id}_a")
-    # Build the FCurves directly so we don't need a temp owner object.
-    for axis in range(3):
-        fc = drop_action.fcurves.new(data_path="location", index=axis)
-        # Two keyframes: rest at start, dropped at end. Only the Z curve
-        # carries a real value; X and Y stay at 0 so the ADD blend is a
-        # pure vertical offset that composes with walk_to's translation.
-        kp0 = fc.keyframe_points.insert(frame=float(start_frame), value=0.0)
-        kp1 = fc.keyframe_points.insert(
-            frame=float(end_frame),
-            value=(-SEATED_HIP_DROP_M if axis == 2 else 0.0),
-        )
-        kp0.interpolation = "LINEAR"
-        kp1.interpolation = "LINEAR"
+    dummy = bpy.data.objects.new(f"veraframe_sit_drop_source_{action_id}", None)
+    bpy.context.scene.collection.objects.link(dummy)
+    try:
+        dummy.animation_data_create()
+        dummy.animation_data.action = drop_action
+        for axis_index in range(3):
+            dummy.location[axis_index] = 0.0
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=start_frame)
+            dummy.location[axis_index] = -SEATED_HIP_DROP_M if axis_index == 2 else 0.0
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=end_frame)
+    finally:
+        bpy.data.objects.remove(dummy, do_unlink=True)
     return drop_action
 
 
