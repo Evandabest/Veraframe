@@ -50,6 +50,7 @@ def execute_timeline(
     asset_paths: dict,
     fps: int = 24,
     character_assets: dict | None = None,
+    project_style: dict | None = None,
 ) -> dict:
     """Apply the timeline to currently-loaded characters.
 
@@ -59,6 +60,11 @@ def execute_timeline(
     character has its own entry, the dispatcher uses it instead of the
     global map — needed because user-uploaded characters can come with
     their own idle / walk FBX files baked against a non-shared rig.
+
+    `project_style` is an optional per-project style lock. Currently only
+    `lighting` is honored: if set, a `set_lighting(preset=...)` action is
+    injected at each shot's start whenever the user hasn't already authored
+    one. Future style fields (lens, color LUT, post stack) will slot in here.
 
     Returns `{executed: [...], skipped: [...], fps: <n>}` — every action in
     the timeline appears in exactly one of those lists.
@@ -78,6 +84,14 @@ def execute_timeline(
 
     executed: list[dict] = []
     skipped: list[dict] = []
+
+    # Project style lock — inject a default set_lighting at each shot's
+    # start when the project has a lighting preset locked in. Author-
+    # provided set_lighting at the same frame wins.
+    if project_style and isinstance(project_style, dict):
+        lighting = project_style.get("lighting")
+        if lighting:
+            timeline = _inject_default_lighting(timeline, lighting)
 
     # Per-shot camera binding. Each shot has a `camera` field that names the
     # default camera for its time window. We inject an implicit camera_cut at
@@ -190,6 +204,49 @@ def execute_timeline(
 _CINEMATIC_CAMERA_TYPES = frozenset(
     {"camera_cut", "camera_dolly", "track_subject", "two_shot", "over_shoulder", "orbit"}
 )
+
+
+def _inject_default_lighting(timeline: dict, lighting_preset: str) -> dict:
+    """For each shot with no author-provided set_lighting at its start,
+    inject one referencing `lighting_preset`. Author intent wins.
+    """
+    if not isinstance(timeline, dict):
+        return timeline
+    shots = timeline.get("shots", [])
+    if not isinstance(shots, list) or not shots:
+        return timeline
+
+    new_shots: list[dict] = []
+    for shot in shots:
+        if not isinstance(shot, dict):
+            new_shots.append(shot)
+            continue
+        shot_start = float(shot.get("start", 0))
+        actions = list(shot.get("actions", []))
+        # Author already specified set_lighting at (or extremely near) the
+        # shot's start → don't overwrite.
+        has_explicit = any(
+            a.get("type") == "set_lighting"
+            and abs(float(a.get("start", 0)) - shot_start) < 0.05
+            for a in actions
+        )
+        if not has_explicit:
+            actions.insert(
+                0,
+                {
+                    "id": f"_project_lighting_{shot.get('id', 'shot')}",
+                    "type": "set_lighting",
+                    "preset": lighting_preset,
+                    "start": shot_start,
+                    "end": shot_start + 0.1,
+                },
+            )
+        new_shot = dict(shot)
+        new_shot["actions"] = actions
+        new_shots.append(new_shot)
+    out = dict(timeline)
+    out["shots"] = new_shots
+    return out
 
 
 def _suggest_cameras(timeline: dict) -> dict:
