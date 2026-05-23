@@ -101,6 +101,60 @@ export async function ffmpegSplice(
  * no re-encode); falls back to a filter-based re-encode if copy fails
  * (codec/dimension mismatch, etc.).
  */
+/**
+ * Mix multiple WAV files into the audio track of an existing video, placing
+ * each clip at its `offsetSec` start time. The video stream is copied
+ * unchanged (no re-encode), so this is fast even for long videos.
+ *
+ * Implementation: each input WAV gets an `adelay` filter to push it to its
+ * timeline position, then they're summed with `amix`. Empty `clips` is a
+ * silent no-op that just copies the input video to the output.
+ */
+export async function ffmpegMuxAudio(
+  videoPath: string,
+  outputPath: string,
+  clips: Array<{ audioPath: string; offsetSec: number }>
+): Promise<void> {
+  if (clips.length === 0) {
+    // No audio to mix — strip-copy the video to outputPath so the caller can
+    // treat the result uniformly.
+    await runFfmpeg(['-y', '-i', videoPath, '-c', 'copy', outputPath])
+    return
+  }
+
+  // Build the filter graph. For each audio input, delay it by offsetSec * 1000ms
+  // on both channels (adelay takes ms per channel). Then amix sums them with
+  // duration=longest so the final track covers everything.
+  const filterParts: string[] = []
+  const inputs: string[] = ['-i', videoPath]
+  clips.forEach((clip, i) => {
+    inputs.push('-i', clip.audioPath)
+    const delayMs = Math.max(0, Math.round(clip.offsetSec * 1000))
+    // [i+1] = audio input index (video is [0]). Output label: [d<i>].
+    filterParts.push(`[${i + 1}:a]adelay=${delayMs}|${delayMs}[d${i}]`)
+  })
+  const delayedLabels = clips.map((_, i) => `[d${i}]`).join('')
+  filterParts.push(`${delayedLabels}amix=inputs=${clips.length}:duration=longest[aout]`)
+
+  await runFfmpeg([
+    '-y',
+    ...inputs,
+    '-filter_complex',
+    filterParts.join(';'),
+    '-map',
+    '0:v',
+    '-map',
+    '[aout]',
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    outputPath
+  ])
+}
+
 export async function ffmpegAppend(
   previousPath: string,
   slicePath: string,
