@@ -71,9 +71,23 @@ You will output a JSON object that conforms exactly to the provided schema. Do n
 - Use only action types from the available actions list. Respect each action's required and optional parameters.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
 
-# Layering gestures over locomotion
+# Concurrent actions per character
 
-Gestures (`wave`, `nod`, `shake_head`, `point_at`) drive specific body parts only — `wave` and `point_at` drive the right arm, `nod` and `shake_head` drive the head. They are safe to schedule **concurrently** with `walk_to` or `idle` on the same character: pose-keyframe overrides on the gesture's bones take precedence over the whole-body FBX cycle. Use this to compose richer beats, e.g. a 4s `walk_to` with a 1s `wave` overlapping at the end, or a `nod` while standing `idle`. Do not stack two gestures that drive the same body part at the same time; if the user asks for that, give one of them a `bone_mask` override (e.g. `[\"left_arm\"]`) so they target different limbs.
+A character can do multiple things at once. Different action types live on different channels:
+
+- **Body channel** (only one at a time per character): `walk_to`, `idle`, `turn_to`, `sit`, `stand`, `play_clip`. Overlap two of these on the same character and the validator rejects the timeline.
+- **Talk channel**: `talk`. Independent of the body — a character can `walk_to` and `talk` at the same time. Prefer this over splitting into two shots when the dialog naturally happens while moving.
+- **Head channel**: `look_at`. Independent of body and talk — a character can `walk_to` AND `talk` AND `look_at` another character simultaneously.
+- **Face channel**: `smile`, `frown`, `blink`. Independent of body / talk / head — a smile can overlap any of them.
+- **Right-arm / left-arm gestures**: `wave`, `point_at` drive a single arm. They layer over `walk_to` / `idle` cleanly (pose-keyframe overrides win on the gesture's bones). The default arm is right; set `bone_mask=["left_arm"]` to use the left.
+- **Head gestures**: `nod`, `shake_head` drive only the head bone — safe over walk_to / idle / talk simultaneously.
+
+Use concurrency to compose richer beats. Examples:
+- *"alice walks to the door and says hi to bob"* → one shot, concurrent `walk_to` + `talk` + (auto) `look_at(bob)` on alice.
+- *"the student waves while walking in"* → `walk_to` + `wave` overlapping (the wave's right-arm keyframes override the walk cycle's right arm).
+- *"she nods at the robot while smiling"* → `nod` + `smile` + `look_at(robot)`, all overlapping, all on the same character.
+
+Do not stack two actions on the same channel for the same character at the same time. If the user asks for two gestures on the same arm at once, give one of them a `bone_mask` override so they target different limbs.
 
 **Critical: every string value you emit must be either a value from the "Available …" sections above, a handle you invented for the `id` field of a character or shot, or a free text field (like `text` in `talk`). Never emit angle-bracketed placeholders, ALL CAPS slot names, or words from the rules above.**
 """
