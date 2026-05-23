@@ -19,7 +19,17 @@ def execute(
     start_frame: int,
     end_frame: int,
     action_id: str = "sit",
+    already_seated: bool = False,
 ) -> dict:
+    """Place a sit on `armature` for `[start_frame, end_frame]`.
+
+    When `already_seated` is True, the previous sit's body-drop ADD strip
+    is still HOLDing at -SEATED_HIP_DROP_M; placing another drop strip
+    would ADD another -SEATED_HIP_DROP_M on top, sinking the character
+    into the floor. In that case we skip the drop track and only place
+    the leg-pose strip (a redundant REPLACE over the same held pose,
+    visually identical to the prior sit's hold).
+    """
     if bpy is None:
         raise SitActionError("bpy unavailable")
 
@@ -47,26 +57,28 @@ def execute(
     strip.blend_type = "REPLACE"
     strip.extrapolation = "HOLD"
 
-    # 2. Body drop on a separate ADD-blend track. The armature's z drops
-    #    from 0 to -SEATED_HIP_DROP_M over the sit duration; HOLD keeps
-    #    it lowered after the strip ends (until `stand` adds the inverse).
-    #    Same ADD-blend pattern walk_to uses for travel, so the two
-    #    compose cleanly (e.g. walk to a chair, then sit there).
-    drop_action = _build_hip_drop_action(action_id, s, e)
-    drop_track = armature.animation_data.nla_tracks.new()
-    drop_track.name = f"veraframe_sit_drop_{action_id}"
-    drop_strip = drop_track.strips.new(name=f"drop_{action_id}", start=s, action=drop_action)
-    drop_strip.blend_type = "ADD"
-    drop_strip.extrapolation = "HOLD"
+    # 2. Body drop on a separate ADD-blend track. Skipped when the
+    #    character is already seated to avoid compounding the drop.
+    drop_track_name: str | None = None
+    if not already_seated:
+        drop_action = _build_hip_drop_action(action_id, s, e)
+        drop_track = armature.animation_data.nla_tracks.new()
+        drop_track.name = f"veraframe_sit_drop_{action_id}"
+        drop_strip = drop_track.strips.new(
+            name=f"drop_{action_id}", start=s, action=drop_action
+        )
+        drop_strip.blend_type = "ADD"
+        drop_strip.extrapolation = "HOLD"
+        drop_track_name = drop_track.name
 
     return {
         "armature": armature.name,
         "track": track.name,
-        "drop_track": drop_track.name,
+        "drop_track": drop_track_name,
         "frame_start": s,
         "frame_end": e,
         "bones": list(SEATED_BONES),
-        "hip_drop_m": SEATED_HIP_DROP_M,
+        "hip_drop_m": 0.0 if already_seated else SEATED_HIP_DROP_M,
     }
 
 

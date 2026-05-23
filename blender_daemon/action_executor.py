@@ -157,8 +157,16 @@ def execute_timeline(
             if char_id and char_id in seated_chars:
                 # Safety net: hold the seated pose for this window
                 # instead of popping the character back to standing.
+                # `already_seated=True` skips the hip-drop ADD strip so
+                # the body doesn't sink further on top of the previous
+                # sit's held drop.
                 _dispatch_pose(
-                    {**action, "type": "sit"}, characters, fps, executed, skipped
+                    {**action, "type": "sit"},
+                    characters,
+                    fps,
+                    executed,
+                    skipped,
+                    already_seated=True,
                 )
                 return
             _dispatch_idle(action, characters, _resolve, fps, executed, skipped)
@@ -181,12 +189,18 @@ def execute_timeline(
         elif atype == "point_at":
             _dispatch_point_at(action, characters, fps, executed, skipped)
         elif atype in ("sit", "stand"):
+            # Inspect the seated state BEFORE mutating it, so a repeat
+            # sit knows to skip its hip-drop ADD strip (the previous
+            # sit's drop is still HOLDing).
+            was_seated = bool(char_id) and char_id in seated_chars
             if char_id:
                 if atype == "sit":
                     seated_chars.add(char_id)
                 else:
                     seated_chars.discard(char_id)
-            _dispatch_pose(action, characters, fps, executed, skipped)
+            _dispatch_pose(
+                action, characters, fps, executed, skipped, already_seated=was_seated
+            )
         elif atype == "talk":
             _dispatch_talk(action, characters, fps, executed, skipped)
         elif atype in ("smile", "frown", "blink"):
@@ -863,6 +877,8 @@ def _dispatch_pose(
     fps: int,
     executed: list[dict],
     skipped: list[dict],
+    *,
+    already_seated: bool = False,
 ) -> None:
     action_id = action.get("id", "?")
     atype = action.get("type")
@@ -882,7 +898,20 @@ def _dispatch_pose(
     end_frame = int(action["end"] * fps)
     handler, error_cls = _POSE_HANDLERS[atype]
     try:
-        result = handler(armature, start_frame, end_frame, action_id=action_id)
+        # Sit's `execute` accepts an `already_seated` kwarg that skips the
+        # hip-drop NLA strip so the body doesn't sink further on a
+        # subsequent "stays sitting" beat. Stand's signature is the
+        # plain one — passing extra kwargs would error.
+        if atype == "sit":
+            result = handler(
+                armature,
+                start_frame,
+                end_frame,
+                action_id=action_id,
+                already_seated=already_seated,
+            )
+        else:
+            result = handler(armature, start_frame, end_frame, action_id=action_id)
     except error_cls as e:
         skipped.append({"id": action_id, "type": atype, "reason": str(e)})
         return
