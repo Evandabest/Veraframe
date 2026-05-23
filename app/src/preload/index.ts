@@ -324,6 +324,10 @@ const veraframe = {
     payload: Omit<ProjectFile, 'version' | 'savedAt'>
   ): Promise<SaveProjectResponse> => ipcRenderer.invoke('saveProject', payload),
   openProject: (): Promise<OpenProjectResponse> => ipcRenderer.invoke('openProject'),
+  saveDocumentation: (
+    payload: { content: string; defaultName?: string }
+  ): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('saveDocumentation', payload),
   onRenderStatus: (callback: (event: RenderStatusEvent) => void): (() => void) => {
     const listener = (_e: Electron.IpcRendererEvent, payload: RenderStatusEvent): void =>
       callback(payload)

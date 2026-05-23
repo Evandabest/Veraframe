@@ -926,6 +926,32 @@ app.whenReady().then(async () => {
   // -------------------------------------------------------------------------
 
   ipcMain.handle(
+    'saveDocumentation',
+    async (
+      _event,
+      payload: { content: string; defaultName?: string }
+    ): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+      const result = await dialog.showSaveDialog({
+        title: 'Export documentation',
+        defaultPath: payload.defaultName ?? 'veraframe-doc.md',
+        filters: [
+          { name: 'Markdown', extensions: ['md'] },
+          { name: 'Plain text', extensions: ['txt'] }
+        ]
+      })
+      if (result.canceled || !result.filePath) {
+        return { ok: false, error: 'save canceled' }
+      }
+      try {
+        await writeFile(result.filePath, payload.content, 'utf8')
+        return { ok: true, path: result.filePath }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
+
+  ipcMain.handle(
     'saveProject',
     async (
       _event,
