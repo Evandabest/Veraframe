@@ -86,6 +86,15 @@ def execute_timeline(
     # camera_cut at that exact frame.
     timeline = _inject_per_shot_cameras(timeline)
 
+    # Heuristic camera suggester. For shots that have no explicit cinematic
+    # camera action (camera_cut, camera_dolly, track_subject, two_shot,
+    # over_shoulder, orbit) and contain at least one walk_to or talk action,
+    # inject a sensible default: track_subject on the most-active character
+    # if there's a walk; two_shot if two characters are talking. This makes
+    # LLM-generated timelines look acceptable when the model forgets to
+    # specify cinematography.
+    timeline = _suggest_cameras(timeline)
+
     # Implicit idle fill — for each character + each shot, walk the existing
     # body-pose actions sorted by start time and inject `idle` for any
     # uncovered time. Without this, gaps render as Mixamo's T-pose, which is
@@ -176,6 +185,102 @@ def execute_timeline(
                 _dispatch_camera(action)
 
     return {"executed": executed, "skipped": skipped, "fps": fps}
+
+
+_CINEMATIC_CAMERA_TYPES = frozenset(
+    {"camera_cut", "camera_dolly", "track_subject", "two_shot", "over_shoulder", "orbit"}
+)
+
+
+def _suggest_cameras(timeline: dict) -> dict:
+    """Inject a sensible cinematic action into shots that have none.
+
+    Heuristics:
+    - Shot already contains a cinematic action (one of `_CINEMATIC_CAMERA_TYPES`
+      OTHER than the implicit per-shot `camera_cut`) → leave alone.
+    - Otherwise pick:
+        * If two distinct characters have `talk` actions within the shot →
+          inject `two_shot(a, b)` for the shot's whole duration.
+        * Else if any character has a `walk_to` → inject `track_subject` for
+          that character.
+        * Else → leave alone (the per-shot camera_cut already gives a static
+          framing).
+
+    Injected actions get id prefix `_suggested_` so they're traceable.
+    """
+    if not isinstance(timeline, dict):
+        return timeline
+    shots = timeline.get("shots", [])
+    if not isinstance(shots, list) or not shots:
+        return timeline
+
+    new_shots: list[dict] = []
+    for shot in shots:
+        if not isinstance(shot, dict):
+            new_shots.append(shot)
+            continue
+        actions = list(shot.get("actions", []))
+
+        # An "author-provided" cinematic action is one the user/LLM wrote —
+        # NOT the implicit camera_cut injected by _inject_per_shot_cameras
+        # (whose id starts with `_shot_camera_`). Anything else of a
+        # cinematic type counts as intent and we leave the shot alone.
+        has_authored_cinematic = any(
+            a.get("type") in _CINEMATIC_CAMERA_TYPES
+            and not str(a.get("id", "")).startswith("_shot_camera_")
+            for a in actions
+        )
+        if has_authored_cinematic:
+            new_shots.append(shot)
+            continue
+
+        shot_start = float(shot.get("start", 0))
+        shot_end = float(shot.get("end", 0))
+
+        # Characters that talk in this shot.
+        talking_chars: list[str] = []
+        seen_talkers: set[str] = set()
+        for a in actions:
+            if a.get("type") == "talk":
+                cid = str(a.get("character", ""))
+                if cid and cid not in seen_talkers:
+                    seen_talkers.add(cid)
+                    talking_chars.append(cid)
+
+        # Character with a walk_to in this shot (first one wins for the
+        # tracking subject — picking the most-active one would need
+        # additional bookkeeping and the impact is small).
+        walker = next(
+            (a.get("character") for a in actions if a.get("type") == "walk_to"),
+            None,
+        )
+
+        suggestion: dict | None = None
+        if len(talking_chars) >= 2:
+            suggestion = {
+                "id": f"_suggested_two_shot_{shot.get('id', 'shot')}",
+                "type": "two_shot",
+                "a": talking_chars[0],
+                "b": talking_chars[1],
+                "start": shot_start,
+                "end": shot_end,
+            }
+        elif walker:
+            suggestion = {
+                "id": f"_suggested_track_{shot.get('id', 'shot')}",
+                "type": "track_subject",
+                "character": walker,
+                "start": shot_start,
+                "end": shot_end,
+            }
+
+        new_shot = dict(shot)
+        new_shot["actions"] = actions + ([suggestion] if suggestion else [])
+        new_shots.append(new_shot)
+
+    out = dict(timeline)
+    out["shots"] = new_shots
+    return out
 
 
 def _inject_per_shot_cameras(timeline: dict) -> dict:
