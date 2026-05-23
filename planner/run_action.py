@@ -50,7 +50,8 @@ Output a JSON object containing ONE action that conforms to the action schema. T
 # Rules
 
 - Pick exactly one action type from the available actions list.
-- For target / look_at fields, refer to either a spawn point in the active scene or another character handle from the context.
+- For target / look_at fields, refer to either a spawn point in the active scene or another character handle from the context. **NEVER use a camera preset name** as a target. If the user wrote "face the camera" / "turn to the camera", pick a character handle from the context that the camera is roughly framing; if none fits, prefer a head-only `look_at` over a body-rotating `turn_to`, or skip the rotation entirely.
+- **Seated state.** If the character is currently in a held `sit` (the timeline shows a prior `sit` action with no subsequent `stand`) and the user says "stay seated" / "remain sitting" / "sit there", emit another `sit` — NOT `idle`. `idle` is a standing pose and would visibly pop the character out of the chair. Only emit `stand` when the user explicitly wants the character to get up.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
 - Output a JSON object with exactly one top-level key `action`. The value is the action object. No prose, no commentary."""
 
