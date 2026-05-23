@@ -72,8 +72,13 @@ interface TimelinePanelProps {
   onAddAction?: (laneId: string, startSec: number) => void
   onAddCharacter?: () => void
   onRetimeAction?: (action: TimelineAction, newStart: number, newEnd: number) => void
+  /** Fires when a chip from the verb palette is dropped on a lane. App
+   *  opens ActionEditor prefilled with the verb's prompt seed. */
+  onPaletteDrop?: (laneId: string, startSec: number, verbType: string) => void
   pendingEdit?: PendingActionEdit | null
 }
+
+const VERB_DRAG_MIME = 'application/x-veraframe-verb'
 
 const EDGE_HIT_PX = 6
 
@@ -120,6 +125,7 @@ export function TimelinePanel({
   onAddAction,
   onAddCharacter,
   onRetimeAction,
+  onPaletteDrop,
   pendingEdit
 }: TimelinePanelProps): React.JSX.Element {
   const tl = asTimeline(timeline)
@@ -180,6 +186,10 @@ export function TimelinePanel({
     start: number
     end: number
   } | null>(null)
+
+  // Verb-palette drag-hover state. While a chip is dragged over a lane,
+  // we light the lane up and show a small tooltip with the snap time.
+  const [dragHover, setDragHover] = useState<{ laneId: string; timeSec: number } | null>(null)
 
   // Drive the playhead at the display refresh rate. While scrubbing, follow
   // the cursor directly so the line never lags. Otherwise read currentTime.
@@ -529,11 +539,53 @@ export function TimelinePanel({
             {lanes.map((lane) => {
               const handlers = makeLaneHandlers(lane)
               const pendingForLane = pendingEdit?.laneId === lane.id ? pendingEdit : null
+              const isDropTarget = dragHover?.laneId === lane.id
+
+              const timeFromClientX = (clientX: number, rect: DOMRect): number => {
+                const pct = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1)
+                return pct * displayDuration
+              }
+
+              const onDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+                if (!onPaletteDrop) return
+                if (!event.dataTransfer.types.includes(VERB_DRAG_MIME)) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'copy'
+                const rect = event.currentTarget.getBoundingClientRect()
+                const timeSec = timeFromClientX(event.clientX, rect)
+                if (dragHover?.laneId !== lane.id || Math.abs((dragHover?.timeSec ?? -1) - timeSec) > 0.05) {
+                  setDragHover({ laneId: lane.id, timeSec })
+                }
+              }
+
+              const onDragLeave = (event: React.DragEvent<HTMLDivElement>): void => {
+                // Only clear when leaving the lane element entirely; ignore
+                // bubbled leaves from child blocks.
+                if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+                if (dragHover?.laneId === lane.id) setDragHover(null)
+              }
+
+              const onDrop = (event: React.DragEvent<HTMLDivElement>): void => {
+                if (!onPaletteDrop) return
+                const verbType = event.dataTransfer.getData(VERB_DRAG_MIME)
+                if (!verbType) return
+                event.preventDefault()
+                const rect = event.currentTarget.getBoundingClientRect()
+                const timeSec = timeFromClientX(event.clientX, rect)
+                setDragHover(null)
+                onPaletteDrop(lane.id, timeSec, verbType)
+              }
+
               return (
                 <div
                   key={lane.id}
                   {...handlers}
-                  className={`relative h-8 rounded bg-neutral-950/60 ${scrubbingCursor ? 'cursor-grabbing' : 'cursor-pointer'}`}
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                  onDrop={onDrop}
+                  className={`relative h-8 rounded bg-neutral-950/60 ${
+                    isDropTarget ? 'ring-2 ring-blue-400' : ''
+                  } ${scrubbingCursor ? 'cursor-grabbing' : 'cursor-pointer'}`}
                   style={{ touchAction: 'none' }}
                 >
                   {/* Subtle "extension area" shading past the current video
@@ -573,6 +625,26 @@ export function TimelinePanel({
                       </div>
                     )
                   })}
+
+                  {/* Drag-hover marker — a vertical line at the snap time
+                      plus a tooltip showing the seconds. */}
+                  {isDropTarget && dragHover && (
+                    <>
+                      <div
+                        className="pointer-events-none absolute inset-y-0 z-20 w-0.5 bg-blue-300"
+                        style={{ left: `${(dragHover.timeSec / displayDuration) * 100}%` }}
+                      />
+                      <div
+                        className="pointer-events-none absolute -top-5 z-20 rounded bg-blue-500/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow"
+                        style={{
+                          left: `${(dragHover.timeSec / displayDuration) * 100}%`,
+                          transform: 'translateX(-50%)'
+                        }}
+                      >
+                        {dragHover.timeSec.toFixed(1)}s
+                      </div>
+                    </>
+                  )}
 
                   {/* Pending edit preview — overlaid on top of the original
                       with a thick emerald ring so the user can compare. */}
