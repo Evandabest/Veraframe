@@ -38,6 +38,20 @@
       "title": "BlinkAction",
       "type": "object"
     },
+    "BodyPart": {
+      "description": "Coarse body regions used by the optional `bone_mask` field on gestures.\n\nA gesture's bone_mask declares which limbs the action drives. Listeners\nuse this to reason about layering: a `wave` (right_arm only) can run\nconcurrently with a `walk_to` (full-body locomotion) without clobbering\nthe legs, while two right_arm actions at the same time conflict.\n\nValues are intentionally coarse (one per limb / region) so the LLM can\npick them by name without needing to know the underlying Mixamo bone\nnaming. The executor maps each part to its bones internally.",
+      "enum": [
+        "head",
+        "spine",
+        "left_arm",
+        "right_arm",
+        "left_leg",
+        "right_leg",
+        "face"
+      ],
+      "title": "BodyPart",
+      "type": "string"
+    },
     "CameraCutAction": {
       "properties": {
         "id": {
@@ -233,6 +247,17 @@
             }
           ],
           "default": null
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdleStyle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -243,6 +268,19 @@
       ],
       "title": "IdleAction",
       "type": "object"
+    },
+    "IdleStyle": {
+      "description": "Emotional/postural flavor applied to idle. Currently informational \u2014\nthe LLM picks a style and downstream tools can branch on it, but the\nexecutor doesn't yet have per-style idle clips.",
+      "enum": [
+        "neutral",
+        "tired",
+        "alert",
+        "confident",
+        "bored",
+        "nervous"
+      ],
+      "title": "IdleStyle",
+      "type": "string"
     },
     "LookAtAction": {
       "properties": {
@@ -288,6 +326,150 @@
       "title": "LookAtAction",
       "type": "object"
     },
+    "NodAction": {
+      "description": "Vertical head-bone pitch oscillation (yes-nod).\n\nTouches the head bone only \u2014 safe to layer over walk_to / idle.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "nod",
+          "default": "nod",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "bone_mask": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/BodyPart"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Body parts this nod drives. Defaults to [head].",
+          "title": "Bone Mask"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "NodAction",
+      "type": "object"
+    },
+    "OrbitAction": {
+      "description": "Active camera circles a target by `degrees` over the action duration.\n\nPositive degrees rotate counterclockwise (when viewed from above).\nTarget is either a character handle or a scene spawn-point name.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "orbit",
+          "default": "orbit",
+          "title": "Type",
+          "type": "string"
+        },
+        "target": {
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "degrees": {
+          "default": 90.0,
+          "title": "Degrees",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "target"
+      ],
+      "title": "OrbitAction",
+      "type": "object"
+    },
+    "OverShoulderAction": {
+      "description": "Over-the-shoulder camera: positioned behind `a`, looking at `b`.\n\nClassic dialogue framing \u2014 the viewer sees the side of A's shoulder/head\non one edge of the frame with B in conversation across the cut. The\ncamera sits at a fixed offset behind A (along the -direction from A to B)\nand looks at B's upper body.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "over_shoulder",
+          "default": "over_shoulder",
+          "title": "Type",
+          "type": "string"
+        },
+        "a": {
+          "minLength": 1,
+          "title": "A",
+          "type": "string"
+        },
+        "b": {
+          "minLength": 1,
+          "title": "B",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "a",
+        "b"
+      ],
+      "title": "OverShoulderAction",
+      "type": "object"
+    },
     "PointAtAction": {
       "properties": {
         "id": {
@@ -320,6 +502,22 @@
           "minLength": 1,
           "title": "Target",
           "type": "string"
+        },
+        "bone_mask": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/BodyPart"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Body parts this point gesture drives. Defaults to [right_arm]. Set to override (e.g. left_arm) when the character should point with a different limb.",
+          "title": "Bone Mask"
         }
       },
       "required": [
@@ -370,6 +568,61 @@
       "title": "SetLightingAction",
       "type": "object"
     },
+    "ShakeHeadAction": {
+      "description": "Horizontal head-bone yaw oscillation (no-shake).\n\nTouches the head bone only \u2014 safe to layer over walk_to / idle.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "shake_head",
+          "default": "shake_head",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "bone_mask": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/BodyPart"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Body parts this head shake drives. Defaults to [head].",
+          "title": "Bone Mask"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "ShakeHeadAction",
+      "type": "object"
+    },
     "Shot": {
       "properties": {
         "id": {
@@ -402,14 +655,21 @@
                 "frown": "#/$defs/FrownAction",
                 "idle": "#/$defs/IdleAction",
                 "look_at": "#/$defs/LookAtAction",
+                "nod": "#/$defs/NodAction",
+                "orbit": "#/$defs/OrbitAction",
+                "over_shoulder": "#/$defs/OverShoulderAction",
                 "point_at": "#/$defs/PointAtAction",
                 "set_lighting": "#/$defs/SetLightingAction",
+                "shake_head": "#/$defs/ShakeHeadAction",
                 "sit": "#/$defs/SitAction",
                 "smile": "#/$defs/SmileAction",
                 "stand": "#/$defs/StandAction",
                 "talk": "#/$defs/TalkAction",
+                "track_subject": "#/$defs/TrackSubjectAction",
                 "turn_to": "#/$defs/TurnToAction",
-                "walk_to": "#/$defs/WalkToAction"
+                "two_shot": "#/$defs/TwoShotAction",
+                "walk_to": "#/$defs/WalkToAction",
+                "wave": "#/$defs/WaveAction"
               },
               "propertyName": "type"
             },
@@ -448,10 +708,31 @@
                 "$ref": "#/$defs/TalkAction"
               },
               {
+                "$ref": "#/$defs/NodAction"
+              },
+              {
+                "$ref": "#/$defs/ShakeHeadAction"
+              },
+              {
+                "$ref": "#/$defs/WaveAction"
+              },
+              {
                 "$ref": "#/$defs/CameraCutAction"
               },
               {
                 "$ref": "#/$defs/CameraDollyAction"
+              },
+              {
+                "$ref": "#/$defs/TrackSubjectAction"
+              },
+              {
+                "$ref": "#/$defs/TwoShotAction"
+              },
+              {
+                "$ref": "#/$defs/OverShoulderAction"
+              },
+              {
+                "$ref": "#/$defs/OrbitAction"
               },
               {
                 "$ref": "#/$defs/SetLightingAction"
@@ -665,6 +946,45 @@
       "title": "TalkAction",
       "type": "object"
     },
+    "TrackSubjectAction": {
+      "description": "Active camera follows a character handle for the action's duration.\n\nThe camera's position is animated from a behind-and-above offset relative\nto the character at start_frame to the same offset at end_frame. If the\ncharacter walks during the window, the camera tracks them.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "track_subject",
+          "default": "track_subject",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "TrackSubjectAction",
+      "type": "object"
+    },
     "TurnToAction": {
       "properties": {
         "id": {
@@ -709,6 +1029,64 @@
       "title": "TurnToAction",
       "type": "object"
     },
+    "TwoShotAction": {
+      "description": "Active camera repositions to frame both `a` and `b` for the duration.\n\nCamera is placed perpendicular to the line A\u2194B, looking at the midpoint,\nat a distance proportional to their separation so both fit in frame.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "two_shot",
+          "default": "two_shot",
+          "title": "Type",
+          "type": "string"
+        },
+        "a": {
+          "minLength": 1,
+          "title": "A",
+          "type": "string"
+        },
+        "b": {
+          "minLength": 1,
+          "title": "B",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "a",
+        "b"
+      ],
+      "title": "TwoShotAction",
+      "type": "object"
+    },
+    "WalkStyle": {
+      "description": "Gait flavor applied to walk_to. The executor maps these to NLA-strip\nspeed multipliers on top of the standard walk_in_place clip \u2014 no\nper-style FBX required. Sneak is the slowest, run the fastest.",
+      "enum": [
+        "walk",
+        "run",
+        "jog",
+        "sneak",
+        "march",
+        "limp"
+      ],
+      "title": "WalkStyle",
+      "type": "string"
+    },
     "WalkToAction": {
       "properties": {
         "id": {
@@ -752,6 +1130,17 @@
             }
           ],
           "default": null
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WalkStyle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -762,6 +1151,73 @@
         "target"
       ],
       "title": "WalkToAction",
+      "type": "object"
+    },
+    "WaveAction": {
+      "description": "Right-arm wave \u2014 raises and oscillates the forearm.\n\nTouches the right-arm bones only \u2014 safe to layer over walk_to / idle\n(whose right-arm motion comes from the FBX cycle, which the wave\nkeyframes override at the pose level).",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "number"
+        },
+        "type": {
+          "const": "wave",
+          "default": "wave",
+          "title": "Type",
+          "type": "string"
+        },
+        "character": {
+          "minLength": 1,
+          "title": "Character",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "bone_mask": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/BodyPart"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Body parts this wave drives. Defaults to [right_arm]. Override to [left_arm] for a left-handed wave.",
+          "title": "Bone Mask"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "character"
+      ],
+      "title": "WaveAction",
       "type": "object"
     }
   },

@@ -71,6 +71,10 @@ You will output a JSON object that conforms exactly to the provided schema. Do n
 - Use only action types from the available actions list. Respect each action's required and optional parameters.
 - Use only the listed emotion values: neutral, joy, angry, sorrow, fun.
 
+# Layering gestures over locomotion
+
+Gestures (`wave`, `nod`, `shake_head`, `point_at`) drive specific body parts only — `wave` and `point_at` drive the right arm, `nod` and `shake_head` drive the head. They are safe to schedule **concurrently** with `walk_to` or `idle` on the same character: pose-keyframe overrides on the gesture's bones take precedence over the whole-body FBX cycle. Use this to compose richer beats, e.g. a 4s `walk_to` with a 1s `wave` overlapping at the end, or a `nod` while standing `idle`. Do not stack two gestures that drive the same body part at the same time; if the user asks for that, give one of them a `bone_mask` override (e.g. `[\"left_arm\"]`) so they target different limbs.
+
 **Critical: every string value you emit must be either a value from the "Available …" sections above, a handle you invented for the `id` field of a character or shot, or a free text field (like `text` in `talk`). Never emit angle-bracketed placeholders, ALL CAPS slot names, or words from the rules above.**
 """
 

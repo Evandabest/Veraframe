@@ -22,11 +22,23 @@ export type Type = "walk_to";
 export type Character1 = string;
 export type Target = string;
 export type Emotion = "neutral" | "joy" | "angry" | "sorrow" | "fun";
+/**
+ * Gait flavor applied to walk_to. The executor maps these to NLA-strip
+ * speed multipliers on top of the standard walk_in_place clip — no
+ * per-style FBX required. Sneak is the slowest, run the fastest.
+ */
+export type WalkStyle = "walk" | "run" | "jog" | "sneak" | "march" | "limp";
 export type Id3 = string;
 export type Start2 = number;
 export type End2 = number;
 export type Type1 = "idle";
 export type Character2 = string;
+/**
+ * Emotional/postural flavor applied to idle. Currently informational —
+ * the LLM picks a style and downstream tools can branch on it, but the
+ * executor doesn't yet have per-style idle clips.
+ */
+export type IdleStyle = "neutral" | "tired" | "alert" | "confident" | "bored" | "nervous";
 export type Id4 = string;
 export type Start3 = number;
 export type End3 = number;
@@ -45,6 +57,23 @@ export type End5 = number;
 export type Type4 = "point_at";
 export type Character5 = string;
 export type Target3 = string;
+/**
+ * Body parts this point gesture drives. Defaults to [right_arm]. Set to override (e.g. left_arm) when the character should point with a different limb.
+ */
+export type BoneMask = BodyPart[] | null;
+/**
+ * Coarse body regions used by the optional `bone_mask` field on gestures.
+ *
+ * A gesture's bone_mask declares which limbs the action drives. Listeners
+ * use this to reason about layering: a `wave` (right_arm only) can run
+ * concurrently with a `walk_to` (full-body locomotion) without clobbering
+ * the legs, while two right_arm actions at the same time conflict.
+ *
+ * Values are intentionally coarse (one per limb / region) so the LLM can
+ * pick them by name without needing to know the underlying Mixamo bone
+ * naming. The executor maps each part to its bones internally.
+ */
+export type BodyPart = "head" | "spine" | "left_arm" | "right_arm" | "left_leg" | "right_leg" | "face";
 export type Id7 = string;
 export type Start6 = number;
 export type End6 = number;
@@ -81,18 +110,69 @@ export type Gesture = string | null;
 export type Id13 = string;
 export type Start12 = number;
 export type End12 = number;
-export type Type11 = "camera_cut";
-export type Camera1 = string;
+export type Type11 = "nod";
+export type Character12 = string;
+/**
+ * Body parts this nod drives. Defaults to [head].
+ */
+export type BoneMask1 = BodyPart[] | null;
 export type Id14 = string;
 export type Start13 = number;
 export type End13 = number;
-export type Type12 = "camera_dolly";
-export type FromCamera = string;
-export type ToCamera = string;
+export type Type12 = "shake_head";
+export type Character13 = string;
+/**
+ * Body parts this head shake drives. Defaults to [head].
+ */
+export type BoneMask2 = BodyPart[] | null;
 export type Id15 = string;
 export type Start14 = number;
 export type End14 = number;
-export type Type13 = "set_lighting";
+export type Type13 = "wave";
+export type Character14 = string;
+export type Target4 = string | null;
+/**
+ * Body parts this wave drives. Defaults to [right_arm]. Override to [left_arm] for a left-handed wave.
+ */
+export type BoneMask3 = BodyPart[] | null;
+export type Id16 = string;
+export type Start15 = number;
+export type End15 = number;
+export type Type14 = "camera_cut";
+export type Camera1 = string;
+export type Id17 = string;
+export type Start16 = number;
+export type End16 = number;
+export type Type15 = "camera_dolly";
+export type FromCamera = string;
+export type ToCamera = string;
+export type Id18 = string;
+export type Start17 = number;
+export type End17 = number;
+export type Type16 = "track_subject";
+export type Character15 = string;
+export type Id19 = string;
+export type Start18 = number;
+export type End18 = number;
+export type Type17 = "two_shot";
+export type A = string;
+export type B = string;
+export type Id20 = string;
+export type Start19 = number;
+export type End19 = number;
+export type Type18 = "over_shoulder";
+export type A1 = string;
+export type B1 = string;
+export type Id21 = string;
+export type Start20 = number;
+export type End20 = number;
+export type Type19 = "orbit";
+export type Target5 = string;
+export type Degrees = number;
+export type Id22 = string;
+export type Start21 = number;
+export type End21 = number;
+export type Type20 = "set_lighting";
 export type Preset1 = string;
 export type Actions = (
   | WalkToAction
@@ -106,8 +186,15 @@ export type Actions = (
   | FrownAction
   | BlinkAction
   | TalkAction
+  | NodAction
+  | ShakeHeadAction
+  | WaveAction
   | CameraCutAction
   | CameraDollyAction
+  | TrackSubjectAction
+  | TwoShotAction
+  | OverShoulderAction
+  | OrbitAction
   | SetLightingAction
 )[];
 export type Shots = Shot[];
@@ -141,6 +228,7 @@ export interface WalkToAction {
   character: Character1;
   target: Target;
   emotion?: Emotion | null;
+  style?: WalkStyle | null;
   [k: string]: unknown;
 }
 export interface IdleAction {
@@ -150,6 +238,7 @@ export interface IdleAction {
   type?: Type1;
   character: Character2;
   emotion?: Emotion | null;
+  style?: IdleStyle | null;
   [k: string]: unknown;
 }
 export interface TurnToAction {
@@ -177,6 +266,7 @@ export interface PointAtAction {
   type?: Type4;
   character: Character5;
   target: Target3;
+  bone_mask?: BoneMask;
   [k: string]: unknown;
 }
 export interface SitAction {
@@ -231,28 +321,135 @@ export interface TalkAction {
   gesture?: Gesture;
   [k: string]: unknown;
 }
-export interface CameraCutAction {
+/**
+ * Vertical head-bone pitch oscillation (yes-nod).
+ *
+ * Touches the head bone only — safe to layer over walk_to / idle.
+ */
+export interface NodAction {
   id: Id13;
   start: Start12;
   end: End12;
   type?: Type11;
-  camera: Camera1;
+  character: Character12;
+  bone_mask?: BoneMask1;
   [k: string]: unknown;
 }
-export interface CameraDollyAction {
+/**
+ * Horizontal head-bone yaw oscillation (no-shake).
+ *
+ * Touches the head bone only — safe to layer over walk_to / idle.
+ */
+export interface ShakeHeadAction {
   id: Id14;
   start: Start13;
   end: End13;
   type?: Type12;
-  from_camera: FromCamera;
-  to_camera: ToCamera;
+  character: Character13;
+  bone_mask?: BoneMask2;
   [k: string]: unknown;
 }
-export interface SetLightingAction {
+/**
+ * Right-arm wave — raises and oscillates the forearm.
+ *
+ * Touches the right-arm bones only — safe to layer over walk_to / idle
+ * (whose right-arm motion comes from the FBX cycle, which the wave
+ * keyframes override at the pose level).
+ */
+export interface WaveAction {
   id: Id15;
   start: Start14;
   end: End14;
   type?: Type13;
+  character: Character14;
+  target?: Target4;
+  bone_mask?: BoneMask3;
+  [k: string]: unknown;
+}
+export interface CameraCutAction {
+  id: Id16;
+  start: Start15;
+  end: End15;
+  type?: Type14;
+  camera: Camera1;
+  [k: string]: unknown;
+}
+export interface CameraDollyAction {
+  id: Id17;
+  start: Start16;
+  end: End16;
+  type?: Type15;
+  from_camera: FromCamera;
+  to_camera: ToCamera;
+  [k: string]: unknown;
+}
+/**
+ * Active camera follows a character handle for the action's duration.
+ *
+ * The camera's position is animated from a behind-and-above offset relative
+ * to the character at start_frame to the same offset at end_frame. If the
+ * character walks during the window, the camera tracks them.
+ */
+export interface TrackSubjectAction {
+  id: Id18;
+  start: Start17;
+  end: End17;
+  type?: Type16;
+  character: Character15;
+  [k: string]: unknown;
+}
+/**
+ * Active camera repositions to frame both `a` and `b` for the duration.
+ *
+ * Camera is placed perpendicular to the line A↔B, looking at the midpoint,
+ * at a distance proportional to their separation so both fit in frame.
+ */
+export interface TwoShotAction {
+  id: Id19;
+  start: Start18;
+  end: End18;
+  type?: Type17;
+  a: A;
+  b: B;
+  [k: string]: unknown;
+}
+/**
+ * Over-the-shoulder camera: positioned behind `a`, looking at `b`.
+ *
+ * Classic dialogue framing — the viewer sees the side of A's shoulder/head
+ * on one edge of the frame with B in conversation across the cut. The
+ * camera sits at a fixed offset behind A (along the -direction from A to B)
+ * and looks at B's upper body.
+ */
+export interface OverShoulderAction {
+  id: Id20;
+  start: Start19;
+  end: End19;
+  type?: Type18;
+  a: A1;
+  b: B1;
+  [k: string]: unknown;
+}
+/**
+ * Active camera circles a target by `degrees` over the action duration.
+ *
+ * Positive degrees rotate counterclockwise (when viewed from above).
+ * Target is either a character handle or a scene spawn-point name.
+ */
+export interface OrbitAction {
+  id: Id21;
+  start: Start20;
+  end: End20;
+  type?: Type19;
+  target: Target5;
+  degrees?: Degrees;
+  [k: string]: unknown;
+}
+export interface SetLightingAction {
+  id: Id22;
+  start: Start21;
+  end: End21;
+  type?: Type20;
   preset: Preset1;
   [k: string]: unknown;
 }
