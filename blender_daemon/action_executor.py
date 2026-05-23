@@ -140,12 +140,31 @@ def execute_timeline(
         "set_lighting",
     }
 
+    # Per-character seated state, tracked across the body pass. `sit`
+    # flips it to True; `stand` flips it back to False; `walk_to`
+    # implicitly stands. An `idle` placed while a character is seated
+    # is automatically re-routed to a sit-hold — otherwise the LLM
+    # (or the default gap-fill) emitting `idle` after `sit` would
+    # un-sit the character because idle's leg pose wins over the
+    # held sit pose at the NLA layer.
+    seated_chars: set[str] = set()
+
     def _dispatch_body(action: dict) -> None:
         atype = action.get("type")
         action_id = action.get("id", "?")
+        char_id = action.get("character")
         if atype == "idle":
+            if char_id and char_id in seated_chars:
+                # Safety net: hold the seated pose for this window
+                # instead of popping the character back to standing.
+                _dispatch_pose(
+                    {**action, "type": "sit"}, characters, fps, executed, skipped
+                )
+                return
             _dispatch_idle(action, characters, _resolve, fps, executed, skipped)
         elif atype == "walk_to":
+            if char_id:
+                seated_chars.discard(char_id)
             _dispatch_walk_to(
                 action,
                 characters,
@@ -162,6 +181,11 @@ def execute_timeline(
         elif atype == "point_at":
             _dispatch_point_at(action, characters, fps, executed, skipped)
         elif atype in ("sit", "stand"):
+            if char_id:
+                if atype == "sit":
+                    seated_chars.add(char_id)
+                else:
+                    seated_chars.discard(char_id)
             _dispatch_pose(action, characters, fps, executed, skipped)
         elif atype == "talk":
             _dispatch_talk(action, characters, fps, executed, skipped)

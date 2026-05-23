@@ -89,6 +89,15 @@ Use concurrency to compose richer beats. Examples:
 
 Do not stack two actions on the same channel for the same character at the same time. If the user asks for two gestures on the same arm at once, give one of them a `bone_mask` override so they target different limbs.
 
+# Seated state and the sit → stand pairing
+
+`sit` puts the character into a seated pose AND drops the body to seated hip height; that pose is held automatically after the action ends, until a matching `stand` lifts them back up. So:
+
+- If the user says *"stays sitting"* / *"remains seated"* / *"is still at her desk"* after a previous `sit`, emit ANOTHER `sit` action covering the new window (NOT `idle` — `idle` would override the seated pose with a standing one and the character would visibly pop up). Repeated `sit` actions compose correctly.
+- Only emit `stand` when the user actually wants the character to get back up.
+- If a scene starts with the character already seated and the user wants them to remain so for the duration, the first action on that character should be a `sit` covering the relevant window.
+- Conversely, after a `stand` or for a never-seated character, default body coverage is `idle`.
+
 **Critical: every string value you emit must be either a value from the "Available …" sections above, a handle you invented for the `id` field of a character or shot, or a free text field (like `text` in `talk`). Never emit angle-bracketed placeholders, ALL CAPS slot names, or words from the rules above.**
 """
 
