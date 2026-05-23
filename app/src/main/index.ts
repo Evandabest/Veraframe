@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { startDaemon, type DaemonHandle, type DaemonState } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
+import { summarizeRegistry } from './registry-helpers'
 // buildMockTimeline removed — mock mode now loads a pre-rendered fixture
 // from assets/fixtures/ instead of building + rendering a canned timeline.
 import { runTimeline, type RenderResult } from './render'
@@ -396,30 +397,7 @@ app.whenReady().then(async () => {
   // Registry IPC: list, rescan, and upload scenes/characters.
   // -------------------------------------------------------------------------
 
-  const registrySummary = (
-    reg: AssetRegistry | null
-  ): {
-    scenes: Array<{ id: string; displayName: string; spawnPoints: string[]; cameraPresets: string[]; lightingPresets: string[]; userProvided: boolean }>
-    characters: Array<{ id: string; displayName: string; userProvided: boolean }>
-  } => {
-    if (!reg) return { scenes: [], characters: [] }
-    const userDir = reg.userAssetsDir
-    return {
-      scenes: Object.values(reg.scenes).map((s) => ({
-        id: s.id,
-        displayName: s.displayName,
-        spawnPoints: s.spawnPoints,
-        cameraPresets: s.cameraPresets,
-        lightingPresets: s.lightingPresets,
-        userProvided: Boolean(userDir && s.blendPath.startsWith(userDir))
-      })),
-      characters: Object.values(reg.characters).map((c) => ({
-        id: c.id,
-        displayName: c.displayName,
-        userProvided: Boolean(userDir && c.meshPath.startsWith(userDir))
-      }))
-    }
-  }
+  const registrySummary = (reg: AssetRegistry | null) => summarizeRegistry(reg)
 
   ipcMain.handle('getRegistry', async () => registrySummary(assets))
 
