@@ -1459,6 +1459,9 @@ function App(): React.JSX.Element {
             open
             characterId={ch.id}
             initialDisplayName={ch.displayName}
+            initialDescription={ch.description}
+            initialDefaultEmotion={ch.defaultEmotion}
+            initialVoice={ch.voice}
             meshPath="character.fbx"
             idlePath="idle.fbx"
             walkPath="walk_in_place.fbx"

@@ -13,6 +13,10 @@ export interface EditCharacterModalProps {
   /** The character being edited. Identified by id. */
   characterId: string
   initialDisplayName: string
+  /** Profile fields surfaced from the registry summary. Empty string when unset. */
+  initialDescription?: string
+  initialDefaultEmotion?: string
+  initialVoice?: string
   /** Paths shown in the UI for context — read-only. They live under the
    *  user-data folder and don't change unless the user replaces a file. */
   meshPath: string
@@ -22,10 +26,25 @@ export interface EditCharacterModalProps {
   onSaved: () => void
 }
 
+const EMOTION_VALUES = ['neutral', 'joy', 'angry', 'sorrow', 'fun'] as const
+
 export function EditCharacterModal(props: EditCharacterModalProps): React.JSX.Element | null {
-  const { open, characterId, initialDisplayName, meshPath, idlePath, walkPath } = props
+  const {
+    open,
+    characterId,
+    initialDisplayName,
+    initialDescription = '',
+    initialDefaultEmotion = '',
+    initialVoice = '',
+    meshPath,
+    idlePath,
+    walkPath
+  } = props
 
   const [displayName, setDisplayName] = useState(initialDisplayName)
+  const [description, setDescription] = useState(initialDescription)
+  const [defaultEmotion, setDefaultEmotion] = useState(initialDefaultEmotion)
+  const [voice, setVoice] = useState(initialVoice)
   const [newMesh, setNewMesh] = useState<string | null>(null)
   const [newIdle, setNewIdle] = useState<string | null>(null)
   const [newWalk, setNewWalk] = useState<string | null>(null)
@@ -35,12 +54,22 @@ export function EditCharacterModal(props: EditCharacterModalProps): React.JSX.El
   useEffect(() => {
     if (!open) return
     setDisplayName(initialDisplayName)
+    setDescription(initialDescription)
+    setDefaultEmotion(initialDefaultEmotion)
+    setVoice(initialVoice)
     setNewMesh(null)
     setNewIdle(null)
     setNewWalk(null)
     setError(null)
     setSubmitting(false)
-  }, [open, initialDisplayName, characterId])
+  }, [
+    open,
+    initialDisplayName,
+    initialDescription,
+    initialDefaultEmotion,
+    initialVoice,
+    characterId
+  ])
 
   if (!open) return null
 
@@ -53,7 +82,10 @@ export function EditCharacterModal(props: EditCharacterModalProps): React.JSX.El
     newMesh !== null ||
     newIdle !== null ||
     newWalk !== null ||
-    displayName !== initialDisplayName
+    displayName !== initialDisplayName ||
+    description !== initialDescription ||
+    defaultEmotion !== initialDefaultEmotion ||
+    voice !== initialVoice
 
   const onSave = async (): Promise<void> => {
     setError(null)
@@ -63,7 +95,11 @@ export function EditCharacterModal(props: EditCharacterModalProps): React.JSX.El
       meshPath: newMesh,
       idlePath: newIdle,
       walkPath: newWalk,
-      displayName: displayName !== initialDisplayName ? displayName : null
+      displayName: displayName !== initialDisplayName ? displayName : null,
+      description: description !== initialDescription ? description : null,
+      defaultEmotion:
+        defaultEmotion !== initialDefaultEmotion ? defaultEmotion : null,
+      voice: voice !== initialVoice ? voice : null
     })
     setSubmitting(false)
     if (response.ok) {
@@ -101,6 +137,54 @@ export function EditCharacterModal(props: EditCharacterModalProps): React.JSX.El
               onChange={(e) => setDisplayName(e.target.value)}
               className="w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
             />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-neutral-400">
+              Description
+              <span className="ml-1 text-neutral-500">
+                (folded into the LLM prompt so the model can reason about the character)
+              </span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. anxious lab student, hesitant body language"
+              className="min-h-16 w-full resize-y rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-neutral-400">Default emotion</label>
+              <select
+                value={defaultEmotion}
+                onChange={(e) => setDefaultEmotion(e.target.value)}
+                className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
+              >
+                <option value="">— none —</option>
+                {EMOTION_VALUES.map((e) => (
+                  <option key={e} value={e}>
+                    {e}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-neutral-400">
+                TTS voice
+                <span className="ml-1 text-neutral-500" title="Provider-specific. Example: en-US-AriaNeural (Edge TTS), alloy (OpenAI).">
+                  (?)
+                </span>
+              </label>
+              <input
+                type="text"
+                value={voice}
+                onChange={(e) => setVoice(e.target.value)}
+                placeholder="e.g. en-US-AriaNeural"
+                className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm font-mono focus:border-neutral-500 focus:outline-none"
+              />
+            </div>
           </div>
 
           <SwapRow
