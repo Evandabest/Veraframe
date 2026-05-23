@@ -52,6 +52,7 @@ def execute_timeline(
     fps: int = 24,
     character_assets: dict | None = None,
     project_style: dict | None = None,
+    physics_post_pass: bool = True,
 ) -> dict:
     """Apply the timeline to currently-loaded characters.
 
@@ -145,7 +146,15 @@ def execute_timeline(
         if atype == "idle":
             _dispatch_idle(action, characters, _resolve, fps, executed, skipped)
         elif atype == "walk_to":
-            _dispatch_walk_to(action, characters, _resolve, fps, executed, skipped)
+            _dispatch_walk_to(
+                action,
+                characters,
+                _resolve,
+                fps,
+                executed,
+                skipped,
+                physics_post_pass=physics_post_pass,
+            )
         elif atype == "look_at":
             _dispatch_look_at(action, characters, fps, executed, skipped)
         elif atype == "turn_to":
@@ -599,6 +608,7 @@ def _dispatch_walk_to(
     fps: int,
     executed: list[dict],
     skipped: list[dict],
+    physics_post_pass: bool = True,
 ) -> None:
     action_id = action.get("id", "?")
     char_id = action.get("character")
@@ -652,6 +662,7 @@ def _dispatch_walk_to(
             end_frame,
             action_id=action_id,
             style=action.get("style"),
+            physics_post_pass=physics_post_pass,
         )
     except walk_to_action.WalkToActionError as e:
         skipped.append({"id": action_id, "type": "walk_to", "reason": str(e)})

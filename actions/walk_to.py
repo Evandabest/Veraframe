@@ -8,6 +8,7 @@ to walk to any arbitrary target. This is the canonical "Mixamo in-place +
 custom motion" pattern described in PLAN.md.
 """
 
+import math
 from pathlib import Path
 
 try:
@@ -55,6 +56,7 @@ def execute(
     end_frame: int,
     action_id: str = "walk",
     style: str | None = None,
+    physics_post_pass: bool = True,
 ) -> dict:
     """Walk `armature` from its current location to `target_location`.
 
@@ -64,6 +66,12 @@ def execute(
     fall back to 'walk'. Style affects the leg-cycle speed by multiplying
     the strip's repeat count — root translation timing is unchanged so the
     character still arrives exactly at end_frame.
+
+    When `physics_post_pass` is True (default), the strip's repeat count
+    is computed from the actual travel distance so foot-plants land at
+    the same world position regardless of walk duration — eliminating
+    most foot-slide. Pass False to fall back to the legacy duration-only
+    formula (e.g. for A/B comparisons).
     """
     if bpy is None:
         raise WalkToActionError("bpy unavailable")
@@ -133,7 +141,24 @@ def execute(
     action_length = max(1.0, action.frame_range[1] - action.frame_range[0])
     desired_duration = max(1.0, int(end_frame) - int(start_frame))
     speed_mult = _STYLE_SPEED_MULTIPLIER.get(style or "walk", 1.0)
-    strip.repeat = (desired_duration / action_length) * speed_mult
+
+    if physics_post_pass:
+        # Foot-aligned formula (Step 52): repeat tracks travel distance so
+        # the planted-foot phase falls on a fixed world position regardless
+        # of walk duration.
+        from blender_daemon.physics import compute_walk_repeat
+
+        distance_m = math.sqrt(
+            (end_loc[0] - start_loc[0]) ** 2
+            + (end_loc[1] - start_loc[1]) ** 2
+            + (end_loc[2] - start_loc[2]) ** 2
+        )
+        strip.repeat = compute_walk_repeat(
+            distance_m=distance_m, duration_s=desired_duration, speed_mult=speed_mult
+        )
+    else:
+        # Legacy formula — duration-only. Kept for back-compat.
+        strip.repeat = (desired_duration / action_length) * speed_mult
     # The translation strip below holds world position after the walk. The
     # body strip itself must not hold outside the walk window, or it can mask
     # subsequent body actions on overlapping NLA evaluation.
