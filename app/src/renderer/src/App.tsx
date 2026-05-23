@@ -20,6 +20,7 @@ import {
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
 import { CharacterLibraryModal } from './components/CharacterLibraryModal'
+import { AddMotionClipModal } from './components/AddMotionClipModal'
 import { EditSceneModal } from './components/EditSceneModal'
 import { AddCharacterModal } from './components/AddCharacterModal'
 import type { RegistrySummary, DaemonState } from '../../preload'
@@ -228,6 +229,12 @@ function App(): React.JSX.Element {
   const [projectStyle, setProjectStyle] = useState<{ lighting?: string }>({})
   const [verbPaletteOpen, setVerbPaletteOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [addMotionOpen, setAddMotionOpen] = useState(false)
+
+  const onRemoveMotion = async (id: string): Promise<void> => {
+    const r = await window.veraframe.removeMotion(id)
+    if (r.ok) await refreshRegistry()
+  }
   // Script mode lets the user author a multi-segment timestamped script
   // (`@<time> <prompt>` per line) instead of one free-form prompt. When
   // enabled the textarea is parsed into segments and compiled to a
@@ -1491,6 +1498,7 @@ function App(): React.JSX.Element {
       <CharacterLibraryModal
         open={libraryOpen}
         characters={registry.characters}
+        motions={registry.motions}
         selectedCharacterIds={selectedCharacterIds}
         onToggleCharacter={onToggleCharacter}
         onEditCharacter={(id) => {
@@ -1502,7 +1510,20 @@ function App(): React.JSX.Element {
           setLibraryOpen(false)
           setUploadKind('character')
         }}
+        onAddMotion={() => {
+          setLibraryOpen(false)
+          setAddMotionOpen(true)
+        }}
+        onRemoveMotion={onRemoveMotion}
         onClose={() => setLibraryOpen(false)}
+      />
+      <AddMotionClipModal
+        open={addMotionOpen}
+        onClose={() => setAddMotionOpen(false)}
+        onSaved={async () => {
+          setAddMotionOpen(false)
+          await refreshRegistry()
+        }}
       />
     </div>
   )

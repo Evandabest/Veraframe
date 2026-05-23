@@ -7,27 +7,33 @@
  * all from one place instead of the chip strip in AssetsPanel.
  */
 
-import type { RegistryCharacterSummary } from '../../../preload'
+import type { RegistryCharacterSummary, RegistryMotionSummary } from '../../../preload'
 
 export interface CharacterLibraryModalProps {
   open: boolean
   characters: RegistryCharacterSummary[]
+  motions: RegistryMotionSummary[]
   selectedCharacterIds: string[]
   onToggleCharacter: (id: string, checked: boolean) => void
   onEditCharacter: (id: string) => void
   onRemoveCharacter: (id: string) => void
   onAddCharacter: () => void
+  onAddMotion: () => void
+  onRemoveMotion: (id: string) => void
   onClose: () => void
 }
 
 export function CharacterLibraryModal({
   open,
   characters,
+  motions,
   selectedCharacterIds,
   onToggleCharacter,
   onEditCharacter,
   onRemoveCharacter,
   onAddCharacter,
+  onAddMotion,
+  onRemoveMotion,
   onClose
 }: CharacterLibraryModalProps): React.JSX.Element | null {
   if (!open) return null
@@ -139,7 +145,7 @@ export function CharacterLibraryModal({
           )}
         </div>
 
-        <footer className="flex items-center justify-between">
+        <div className="mt-2 flex items-center justify-between">
           <p className="text-[11px] text-neutral-500">
             {selected.size} selected / {characters.length} installed
           </p>
@@ -150,7 +156,74 @@ export function CharacterLibraryModal({
           >
             + Add character
           </button>
-        </footer>
+        </div>
+
+        <section className="mt-2 flex flex-col gap-2 border-t border-neutral-800 pt-3">
+          <header className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-semibold text-neutral-100">Motion clips</h4>
+              <p className="mt-0.5 text-xs text-neutral-400">
+                User-supplied FBX animations the LLM can schedule via
+                <code className="ml-1 font-mono">play_clip</code>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onAddMotion}
+              className="rounded-md border border-fuchsia-500 bg-fuchsia-500/15 px-3 py-1 text-xs font-medium text-fuchsia-200 hover:bg-fuchsia-500/30"
+            >
+              + Add motion clip
+            </button>
+          </header>
+          {motions.length === 0 ? (
+            <p className="text-[11px] text-neutral-500">
+              No motion clips installed yet. Upload a Mixamo FBX to unlock the
+              <code className="ml-1 font-mono">play_clip</code> action.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {motions.map((m) => (
+                <li
+                  key={m.id}
+                  className="flex items-start justify-between gap-2 rounded border border-neutral-800 bg-neutral-950/60 px-2 py-1.5 text-xs"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-neutral-100">
+                      {m.displayName}{' '}
+                      <span className="ml-1 font-mono text-[10px] text-neutral-500">{m.id}</span>
+                      {m.userProvided && (
+                        <span className="ml-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                          yours
+                        </span>
+                      )}
+                    </p>
+                    {m.description ? (
+                      <p className="mt-0.5 text-[11px] text-neutral-300">{m.description}</p>
+                    ) : (
+                      <p className="mt-0.5 text-[11px] italic text-neutral-500">No description.</p>
+                    )}
+                  </div>
+                  {m.userProvided && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          window.confirm(`Remove motion clip "${m.displayName}" from the library?`)
+                        ) {
+                          onRemoveMotion(m.id)
+                        }
+                      }}
+                      title="Remove this clip"
+                      className="rounded border border-red-500/60 bg-red-500/10 px-2 py-0.5 text-[10px] text-red-200 hover:bg-red-500/25"
+                    >
+                      ×
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   )
