@@ -21,6 +21,9 @@ export interface RangeEditPanelProps {
   /** Submit the prompt; the parent makes the LLM call and previews the
    *  result. The pending preview UI lives in App next to the timeline. */
   onSubmit: (prompt: string) => void
+  /** Export the selected window as a Markdown doc via the save dialog.
+   *  Optional — when omitted the button is hidden. */
+  onExport?: () => void
 }
 
 export function RangeEditPanel({
@@ -28,7 +31,8 @@ export function RangeEditPanel({
   generating,
   error,
   onCancel,
-  onSubmit
+  onSubmit,
+  onExport
 }: RangeEditPanelProps): React.JSX.Element | null {
   const [prompt, setPrompt] = useState('')
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -80,6 +84,17 @@ export function RangeEditPanel({
       />
       {error && <p className="text-xs text-red-300">{error}</p>}
       <div className="flex items-center justify-end gap-2">
+        {onExport && (
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={generating}
+            title="Export this range as a Markdown doc (beat-by-beat)."
+            className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+          >
+            Export range doc
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onSubmit(prompt)}

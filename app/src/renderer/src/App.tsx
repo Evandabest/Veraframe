@@ -6,6 +6,7 @@ import { VerbPalette } from './components/VerbPalette'
 import { TakesPanel } from './components/TakesPanel'
 import { RangeEditPanel } from './components/RangeEditPanel'
 import { mergeRangeEdit } from './range-edit'
+import { formatTimelineMarkdown } from './docs'
 import { frozenInWindow, toggleFrozen } from './frozen'
 import type { Timeline as TimelineFull, TimelineAction as TLAction } from './timeline-types'
 import { verbByType } from './verbs'
@@ -237,6 +238,22 @@ function App(): React.JSX.Element {
   const onRemoveMotion = async (id: string): Promise<void> => {
     const r = await window.veraframe.removeMotion(id)
     if (r.ok) await refreshRegistry()
+  }
+
+  const onExportDocumentation = async (
+    range: { start: number; end: number } | null
+  ): Promise<void> => {
+    if (state.status !== 'success') return
+    const tl = state.timeline as unknown as TimelineFull
+    const md = formatTimelineMarkdown(tl, {
+      projectName: projectPath ? projectPath.replace(/^.*[\\/]/, '').replace(/\..+$/, '') : undefined,
+      range
+    })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const defaultName = range
+      ? `veraframe-doc-${range.start.toFixed(0)}s-${range.end.toFixed(0)}s.md`
+      : `veraframe-doc-${stamp}.md`
+    await window.veraframe.saveDocumentation({ content: md, defaultName })
   }
   // Script mode lets the user author a multi-segment timestamped script
   // (`@<time> <prompt>` per line) instead of one free-form prompt. When
@@ -961,6 +978,15 @@ function App(): React.JSX.Element {
               </button>
               <button
                 type="button"
+                onClick={() => onExportDocumentation(null)}
+                disabled={isRunning || state.status !== 'success'}
+                title="Export the entire timeline as a Markdown doc (beat-by-beat actions, characters, scene)."
+                className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+              >
+                Export doc
+              </button>
+              <button
+                type="button"
                 onClick={onSaveProject}
                 disabled={isRunning}
                 className="rounded-md border border-emerald-500/60 bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-50"
@@ -1408,6 +1434,7 @@ function App(): React.JSX.Element {
                 error={rangeEditError}
                 onCancel={onCancelRangeEdit}
                 onSubmit={onSubmitRangeEdit}
+                onExport={() => onExportDocumentation(selectedRange)}
               />
             </>
           )}
