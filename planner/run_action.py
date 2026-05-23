@@ -46,7 +46,7 @@ You will be given:
 - (Optionally) the rest of the timeline as context so you can reference other characters or coordinate behaviour.
 - A user instruction describing what the character should do during this time slot.
 
-Output a JSON object `{"actions": [...]}`. Each item's `character`, `start`, `end`, and `id` will be OVERWRITTEN by the caller — so you may put any plausible values there; what matters is each action's `type` and type-specific parameters.
+Output a JSON object `{{"actions": [...]}}`. Each item's `character`, `start`, `end`, and `id` will be OVERWRITTEN by the caller — so you may put any plausible values there; what matters is each action's `type` and type-specific parameters.
 
 {registry_section}
 
