@@ -598,6 +598,20 @@ function App(): React.JSX.Element {
       await onBreakdownScreenplay()
       return
     }
+    // Destructive-path guard: a full Render replaces the current
+    // timeline + video with a fresh LLM-generated pair. Per-block edits,
+    // range edits, retimes, and timeline extensions are additive and
+    // don't need the warning — only this entry point does.
+    if (state.status === 'success') {
+      const ok = window.confirm(
+        'Render will replace your current timeline and video with a fresh ' +
+          'LLM-generated render from the prompt. Any edits, locked actions, ' +
+          'and the existing video will be discarded.\n\n' +
+          'Save the current state as a Take first if you want to keep it.\n\n' +
+          'Continue with re-render?'
+      )
+      if (!ok) return
+    }
     // In script mode, compile the timestamped lines into a structured prompt
     // before sending to the LLM. If parsing produces errors we leave the raw
     // text alone — the UI surfaces the error inline.
