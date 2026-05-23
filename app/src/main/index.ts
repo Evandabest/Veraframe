@@ -7,6 +7,12 @@ import icon from '../../resources/icon.png?asset'
 import { startDaemon, type DaemonHandle, type DaemonState } from './daemon'
 import { loadAssets, resolveAssetsDir, type AssetRegistry } from './assets'
 import { summarizeRegistry } from './registry-helpers'
+import {
+  parseProjectFile,
+  serializeProjectFile,
+  type ProjectFile,
+  type ProjectFilePayload
+} from './project-file'
 // buildMockTimeline removed — mock mode now loads a pre-rendered fixture
 // from assets/fixtures/ instead of building + rendering a canned timeline.
 import { runTimeline, type RenderResult } from './render'
@@ -837,30 +843,11 @@ app.whenReady().then(async () => {
   // mode re-render to materialize the MP4.
   // -------------------------------------------------------------------------
 
-  interface ProjectFile {
-    version: 1
-    /** ISO timestamp when this project was saved. */
-    savedAt: string
-    selectedScene: string | null
-    selectedCharacters: string[]
-    prompt: string
-    mode: 'mock' | 'llm'
-    provider: string
-    model: string
-    /** Optional last-rendered timeline JSON. */
-    timeline: Record<string, unknown> | null
-    /** Per-project style lock (lighting preset, etc.). Optional for
-     *  back-compat with projects saved before this field existed. */
-    projectStyle?: {
-      lighting?: string
-    }
-  }
-
   ipcMain.handle(
     'saveProject',
     async (
       _event,
-      payload: Omit<ProjectFile, 'version' | 'savedAt'>
+      payload: ProjectFilePayload
     ): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
       const result = await dialog.showSaveDialog({
         title: 'Save project',
@@ -871,12 +858,7 @@ app.whenReady().then(async () => {
         return { ok: false, error: 'save canceled' }
       }
       try {
-        const file: ProjectFile = {
-          version: 1,
-          savedAt: new Date().toISOString(),
-          ...payload
-        }
-        await writeFile(result.filePath, JSON.stringify(file, null, 2), 'utf8')
+        await writeFile(result.filePath, serializeProjectFile(payload), 'utf8')
         return { ok: true, path: result.filePath }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
@@ -897,11 +879,9 @@ app.whenReady().then(async () => {
       }
       try {
         const raw = await readFile(result.filePaths[0], 'utf8')
-        const parsed = JSON.parse(raw) as ProjectFile
-        if (parsed.version !== 1) {
-          return { ok: false, error: `unsupported project version: ${parsed.version}` }
-        }
-        return { ok: true, project: parsed, path: result.filePaths[0] }
+        const parsed = parseProjectFile(raw)
+        if (!parsed.ok) return parsed
+        return { ok: true, project: parsed.project, path: result.filePaths[0] }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
