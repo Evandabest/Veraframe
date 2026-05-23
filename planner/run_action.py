@@ -117,9 +117,12 @@ def main(argv: list[str] | None = None) -> int:
         f"User instruction: {args.prompt}"
     )
 
+    # `args.end` is None in the add-action flow (LLM picks duration); only
+    # the edit flow locks both endpoints.
+    end_label = f"{args.end:.2f}s" if args.end is not None else "?"
     print(
         f"action via {config.model_string} for {args.character} @ "
-        f"{args.start:.2f}-{args.end:.2f}s",
+        f"{args.start:.2f}-{end_label}",
         file=sys.stderr,
     )
 
