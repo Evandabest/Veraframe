@@ -727,9 +727,8 @@ function App(): React.JSX.Element {
               <button
                 type="button"
                 onClick={() => setVerbPaletteOpen((v) => !v)}
-                disabled={state.status !== 'success'}
-                title="Open the verb palette — drag chips onto lanes to add actions"
-                className={`rounded-md border px-3 py-1 text-xs disabled:opacity-50 ${
+                title="Open the verb palette — drag chips onto lanes to add actions. Render a timeline first to enable drops."
+                className={`rounded-md border px-3 py-1 text-xs ${
                   verbPaletteOpen
                     ? 'border-blue-500 bg-blue-600/20 text-blue-100'
                     : 'border-neutral-700 text-neutral-200 hover:bg-neutral-800'
