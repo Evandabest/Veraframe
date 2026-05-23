@@ -75,6 +75,12 @@ interface TimelinePanelProps {
   /** Fires when a chip from the verb palette is dropped on a lane. App
    *  opens ActionEditor prefilled with the verb's prompt seed. */
   onPaletteDrop?: (laneId: string, startSec: number, verbType: string) => void
+  /** Current natural-language range selection. Shown as a translucent
+   *  blue overlay; the user shift+drags on a lane to define it. */
+  selectedRange?: { start: number; end: number } | null
+  /** Fired during and after a range selection drag. Receives null when
+   *  the user clears the selection. */
+  onRangeSelect?: (range: { start: number; end: number } | null) => void
   pendingEdit?: PendingActionEdit | null
 }
 
@@ -126,6 +132,8 @@ export function TimelinePanel({
   onAddCharacter,
   onRetimeAction,
   onPaletteDrop,
+  selectedRange,
+  onRangeSelect,
   pendingEdit
 }: TimelinePanelProps): React.JSX.Element {
   const tl = asTimeline(timeline)
@@ -190,6 +198,11 @@ export function TimelinePanel({
   // Verb-palette drag-hover state. While a chip is dragged over a lane,
   // we light the lane up and show a small tooltip with the snap time.
   const [dragHover, setDragHover] = useState<{ laneId: string; timeSec: number } | null>(null)
+
+  // Shift+drag range selection. While the user is actively dragging,
+  // `rangeRef` holds the anchor time; the live range is emitted up via
+  // onRangeSelect so App can render the prompt panel beneath the timeline.
+  const rangeRef = useRef<{ anchorTime: number } | null>(null)
 
   // Drive the playhead at the display refresh rate. While scrubbing, follow
   // the cursor directly so the line never lags. Otherwise read currentTime.
@@ -313,6 +326,18 @@ export function TimelinePanel({
     return {
       onPointerDown: (event) => {
         const rect = event.currentTarget.getBoundingClientRect()
+        // Shift-drag → range selection (preempts scrub + retime).
+        if (event.shiftKey && onRangeSelect) {
+          event.preventDefault()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          const t = Math.max(
+            0,
+            ((event.clientX - rect.left) / rect.width) * displayDuration
+          )
+          rangeRef.current = { anchorTime: t }
+          onRangeSelect({ start: t, end: t })
+          return
+        }
         // Edge hit-test takes priority over scrubbing — pointer-down on an
         // edge enters retime mode and stays there until pointer-up.
         const edgeHit = resolveEdgeHit(lane, event.clientX, rect)
@@ -344,6 +369,20 @@ export function TimelinePanel({
         setScrubbingCursor(true)
       },
       onPointerMove: (event) => {
+        // Range selection takes precedence — once a shift+drag has started
+        // we ignore scrub / retime until pointer-up.
+        if (rangeRef.current && onRangeSelect) {
+          const rect = event.currentTarget.getBoundingClientRect()
+          const t = Math.max(
+            0,
+            Math.min(displayDuration, ((event.clientX - rect.left) / rect.width) * displayDuration)
+          )
+          const a = rangeRef.current.anchorTime
+          const start = Math.min(a, t)
+          const end = Math.max(a, t)
+          onRangeSelect({ start, end })
+          return
+        }
         // Retime takes precedence over scrub.
         if (retimeRef.current) {
           const rect = event.currentTarget.getBoundingClientRect()
@@ -381,6 +420,17 @@ export function TimelinePanel({
       onPointerUp: (event) => {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
           event.currentTarget.releasePointerCapture(event.pointerId)
+        }
+        // Commit / cancel range selection.
+        if (rangeRef.current && onRangeSelect) {
+          const r = selectedRange
+          rangeRef.current = null
+          // If the drag was a no-op (<= 0.1s), clear the selection — likely
+          // a misclick with Shift held.
+          if (!r || r.end - r.start < 0.1) {
+            onRangeSelect(null)
+          }
+          return
         }
         // Commit retime if we were in retime mode.
         if (retimeRef.current && onRetimeAction) {
@@ -510,6 +560,25 @@ export function TimelinePanel({
                 )
               })}
             </div>
+
+            {/* Range selection overlay (Step 48 — natural-language range
+                edit). Shown across all lanes so the user can see exactly
+                which time window is selected; lives behind the action
+                blocks so the blocks remain legible. */}
+            {selectedRange && selectedRange.end > selectedRange.start && (() => {
+              const left = (selectedRange.start / displayDuration) * 100
+              const width = ((selectedRange.end - selectedRange.start) / displayDuration) * 100
+              return (
+                <div
+                  className="pointer-events-none absolute inset-y-0 z-5 border-x-2 border-blue-400 bg-blue-500/15"
+                  style={{ left: `${left}%`, width: `${width}%` }}
+                >
+                  <div className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-blue-500/90 px-1.5 py-0.5 text-[10px] font-mono text-white shadow">
+                    {selectedRange.start.toFixed(1)}s – {selectedRange.end.toFixed(1)}s
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Shot boundaries — dashed vertical lines at each shot's start
                 (except the first, which is the timeline's left edge). Helps
