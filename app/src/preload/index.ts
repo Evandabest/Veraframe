@@ -33,6 +33,13 @@ export interface RenderRequest {
   /** When true, synthesize spoken audio for every `talk` action and mux it
    *  into the rendered MP4. Requires OPENAI_API_KEY in the launching shell. */
   generateAudio?: boolean
+  /** Project-level style lock. When fields are set, the daemon injects the
+   *  matching defaults into every shot unless the author already authored
+   *  the same kind of action at the shot's start. */
+  projectStyle?: {
+    /** Name of a lighting preset from the active scene. */
+    lighting?: string
+  }
 }
 
 export interface RegistrySceneSummary {

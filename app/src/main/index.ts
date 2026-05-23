@@ -48,6 +48,10 @@ export interface RenderRequest {
   quality?: 'draft' | 'hifi'
   /** Whether to synthesize audio for `talk` actions and mux into the MP4. */
   generateAudio?: boolean
+  /** Project-level style lock forwarded to the daemon. */
+  projectStyle?: {
+    lighting?: string
+  }
 }
 
 interface RenderSuccess {
@@ -329,7 +333,8 @@ app.whenReady().then(async () => {
         incremental: incrementalConfig,
         quality: request.quality,
         repoRoot: resolveRepoRoot(),
-        generateAudio: request.generateAudio
+        generateAudio: request.generateAudio,
+        projectStyle: request.projectStyle
       })
       renderedVideos.set(result.renderId, result.videoPath)
       return {
