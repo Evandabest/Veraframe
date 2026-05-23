@@ -50,8 +50,12 @@ def test_walk_to_unknown_target_is_skipped(monkeypatch: pytest.MonkeyPatch) -> N
         timeline=timeline, asset_paths={"walk_in_place": "/x"}
     )
     assert result["executed"] == []
-    assert len(result["skipped"]) == 1
-    assert "not found" in result["skipped"][0]["reason"]
+    # Filter to just walk_to skips — the camera suggester may inject a
+    # track_subject for the walker which fails for unrelated reasons (no
+    # real bpy in this test), and that's not what we're testing here.
+    walk_skips = [s for s in result["skipped"] if s["type"] == "walk_to"]
+    assert len(walk_skips) == 1
+    assert "not found" in walk_skips[0]["reason"]
 
 
 def test_walk_to_no_asset_path_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
