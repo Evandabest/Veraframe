@@ -24,6 +24,7 @@ from actions import look_at as look_at_action
 from actions import nod as nod_action
 from actions import orbit as orbit_action
 from actions import over_shoulder as over_shoulder_action
+from actions import play_clip as play_clip_action
 from actions import point_at as point_at_action
 from actions import set_lighting as set_lighting_action
 from actions import shake_head as shake_head_action
@@ -81,6 +82,12 @@ def execute_timeline(
         if isinstance(per_char, dict) and per_char.get(anim_id):
             return per_char[anim_id]
         return asset_paths.get(anim_id)
+
+    def _resolve_motion(clip_id: str) -> str | None:
+        """Look up a motion-clip path by id. Motion clips live in
+        `asset_paths` under the `motion:<clip_id>` key so they don't
+        collide with the built-in animation slots (idle, walk_in_place)."""
+        return asset_paths.get(f"motion:{clip_id}")
 
     executed: list[dict] = []
     skipped: list[dict] = []
@@ -153,6 +160,8 @@ def execute_timeline(
             _dispatch_emotion(action, characters, fps, executed, skipped)
         elif atype in ("nod", "shake_head", "wave"):
             _dispatch_gesture(action, characters, fps, executed, skipped)
+        elif atype == "play_clip":
+            _dispatch_play_clip(action, characters, _resolve_motion, fps, executed, skipped)
         else:
             skipped.append(
                 {
@@ -471,6 +480,66 @@ def _fill_pose_gaps_with_idle(timeline: dict) -> dict:
     out = dict(timeline)
     out["shots"] = new_shots
     return out
+
+
+def _dispatch_play_clip(
+    action: dict,
+    characters: dict,
+    resolve_motion,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    char_id = action.get("character")
+    clip_id = action.get("clip")
+    armature = characters.get(char_id)
+    if armature is None:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "play_clip",
+                "reason": f"character '{char_id}' not loaded",
+            }
+        )
+        return
+    if not clip_id:
+        skipped.append({"id": action_id, "type": "play_clip", "reason": "no clip id"})
+        return
+    fbx_path = resolve_motion(clip_id)
+    if not fbx_path:
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "play_clip",
+                "reason": (
+                    f"motion clip '{clip_id}' not found — pass its path in"
+                    f" asset_paths under key 'motion:{clip_id}'"
+                ),
+            }
+        )
+        return
+
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    speed = float(action.get("speed", 1.0))
+    loop = bool(action.get("loop", False))
+
+    try:
+        result = play_clip_action.execute(
+            armature,
+            fbx_path,
+            start_frame,
+            end_frame,
+            action_id=action_id,
+            speed=speed,
+            loop=loop,
+        )
+    except play_clip_action.PlayClipActionError as e:
+        skipped.append({"id": action_id, "type": "play_clip", "reason": str(e)})
+        return
+
+    executed.append({"id": action_id, "type": "play_clip", **result})
 
 
 def _dispatch_idle(

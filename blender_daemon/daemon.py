@@ -26,6 +26,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from actions import idle as idle_action  # noqa: E402
+from actions import play_clip as play_clip_action  # noqa: E402
 from actions import walk_to as walk_to_action  # noqa: E402
 from blender_daemon.action_executor import execute_timeline  # noqa: E402
 from blender_daemon.character_loader import load_character  # noqa: E402
@@ -80,6 +81,7 @@ def reset() -> dict:
     # raises "StructRNA of type Action has been removed".
     idle_action.clear_cache()
     walk_to_action.clear_cache()
+    play_clip_action.clear_cache()
     return {"ok": True}
 
 
