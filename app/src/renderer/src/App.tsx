@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { TimelinePanel, type PendingActionEdit } from './components/TimelinePanel'
 import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
+import { VerbPalette } from './components/VerbPalette'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
 import { EditSceneModal } from './components/EditSceneModal'
@@ -206,6 +207,7 @@ function App(): React.JSX.Element {
   // every shot (e.g. set_lighting at shot start) unless the author already
   // authored the same kind of action at the shot's start.
   const [projectStyle, setProjectStyle] = useState<{ lighting?: string }>({})
+  const [verbPaletteOpen, setVerbPaletteOpen] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -701,6 +703,19 @@ function App(): React.JSX.Element {
               </button>
               <button
                 type="button"
+                onClick={() => setVerbPaletteOpen((v) => !v)}
+                disabled={state.status !== 'success'}
+                title="Open the verb palette — drag chips onto lanes to add actions"
+                className={`rounded-md border px-3 py-1 text-xs disabled:opacity-50 ${
+                  verbPaletteOpen
+                    ? 'border-blue-500 bg-blue-600/20 text-blue-100'
+                    : 'border-neutral-700 text-neutral-200 hover:bg-neutral-800'
+                }`}
+              >
+                Verbs
+              </button>
+              <button
+                type="button"
                 onClick={onOpenProject}
                 disabled={isRunning}
                 className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
@@ -1176,6 +1191,7 @@ function App(): React.JSX.Element {
           />
         )
       })()}
+      <VerbPalette open={verbPaletteOpen} onClose={() => setVerbPaletteOpen(false)} />
     </div>
   )
 }
