@@ -258,6 +258,16 @@ export type GenerateActionResponse =
   | { ok: true; action: Record<string, unknown> }
   | { ok: false; error: string }
 
+export interface BreakdownScreenplayRequest {
+  text: string
+  provider?: LLMProvider
+  model?: string
+}
+
+export type BreakdownScreenplayResponse =
+  | { ok: true; segments: Array<{ start: number; end: number; prompt: string }> }
+  | { ok: false; error: string }
+
 export interface EditRangeRequest {
   prompt: string
   scene: string
@@ -294,6 +304,10 @@ const veraframe = {
     ipcRenderer.invoke('generateAction', request),
   editRange: (request: EditRangeRequest): Promise<EditRangeResponse> =>
     ipcRenderer.invoke('editRange', request),
+  breakdownScreenplay: (
+    request: BreakdownScreenplayRequest
+  ): Promise<BreakdownScreenplayResponse> =>
+    ipcRenderer.invoke('breakdownScreenplay', request),
   getRegistry: (): Promise<RegistrySummary> => ipcRenderer.invoke('getRegistry'),
   rescanRegistry: (): Promise<
     { ok: true; registry: RegistrySummary } | { ok: false; error: string }

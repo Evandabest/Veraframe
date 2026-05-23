@@ -24,7 +24,14 @@ import {
 // buildMockTimeline removed — mock mode now loads a pre-rendered fixture
 // from assets/fixtures/ instead of building + rendering a canned timeline.
 import { runTimeline, type RenderResult } from './render'
-import { runPlanner, runEnhance, runActionGen, runRangeEdit, resolveRepoRoot } from './planner'
+import {
+  runPlanner,
+  runEnhance,
+  runActionGen,
+  runRangeEdit,
+  runScreenplayBreakdown,
+  resolveRepoRoot
+} from './planner'
 
 let daemonHandle: DaemonHandle | null = null
 let assets: AssetRegistry | null = null
@@ -368,6 +375,28 @@ app.whenReady().then(async () => {
       return { ok: false, error: (err as Error).message }
     }
   })
+
+  ipcMain.handle(
+    'breakdownScreenplay',
+    async (
+      _event,
+      request: { text: string; provider?: LLMProvider; model?: string }
+    ): Promise<
+      | { ok: true; segments: Array<{ start: number; end: number; prompt: string }> }
+      | { ok: false; error: string }
+    > => {
+      if (!request.text?.trim()) return { ok: false, error: 'screenplay is empty' }
+      try {
+        const result = await runScreenplayBreakdown(request.text, resolveRepoRoot(), {
+          provider: request.provider,
+          model: request.model
+        })
+        return { ok: true, segments: result.segments }
+      } catch (err) {
+        return { ok: false, error: (err as Error).message }
+      }
+    }
+  )
 
   ipcMain.handle(
     'editRange',

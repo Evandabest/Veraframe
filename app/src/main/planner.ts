@@ -175,6 +175,76 @@ export function runActionGen(
   )
 }
 
+export interface ScreenplaySegment {
+  start: number
+  end: number
+  prompt: string
+}
+
+/**
+ * Invoke `python -m planner.run_screenplay_breakdown` to turn a chunk
+ * of screenplay-format text into a list of estimated-timed segments
+ * (same shape Script mode already accepts). The Electron app surfaces
+ * the result in a preview panel for user review before the actual
+ * timeline render runs.
+ */
+export function runScreenplayBreakdown(
+  text: string,
+  repoRoot: string,
+  options: PlannerOptions = {}
+): Promise<{ segments: ScreenplaySegment[] }> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '--directory',
+      repoRoot,
+      'run',
+      'python',
+      '-m',
+      'planner.run_screenplay_breakdown',
+      '--text',
+      text
+    ]
+    const env: NodeJS.ProcessEnv = { ...process.env }
+    if (options.provider) env.VERAFRAME_LLM_PROVIDER = options.provider
+    if (options.model) env.VERAFRAME_LLM_MODEL = options.model
+    if (options.ollamaHost) env.OLLAMA_API_BASE = options.ollamaHost
+    env.LITELLM_LOG = env.LITELLM_LOG ?? 'ERROR'
+    const child = spawn('uv', args, { stdio: ['ignore', 'pipe', 'pipe'], env })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8')
+    })
+    child.stderr.on('data', (chunk) => {
+      const text = chunk.toString('utf8')
+      stderr += text
+      for (const line of text.split('\n')) {
+        if (line.trim()) console.log(`[screenplay] ${line}`)
+      }
+    })
+    child.once('error', (err) => {
+      reject(new PlannerError(`uv spawn failed: ${err.message}`))
+    })
+    child.once('close', (code) => {
+      if (code !== 0) {
+        reject(
+          new PlannerError(
+            `run_screenplay_breakdown exited with code ${code}: ${stderr.trim()}`
+          )
+        )
+        return
+      }
+      try {
+        resolve(JSON.parse(stdout) as { segments: ScreenplaySegment[] })
+      } catch (e) {
+        reject(
+          new PlannerError(`run_screenplay_breakdown output unparsable: ${(e as Error).message}`)
+        )
+      }
+    })
+  })
+}
+
 export interface RangeEditContext {
   scene: string
   start: number
