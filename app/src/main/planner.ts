@@ -175,6 +175,43 @@ export function runActionGen(
   )
 }
 
+export interface RangeEditContext {
+  scene: string
+  start: number
+  end: number
+  /** Full timeline JSON so the LLM sees outside-window actions. */
+  context: Record<string, unknown>
+}
+
+/**
+ * Invoke `python -m planner.run_range_edit` to regenerate the actions
+ * inside [start, end]. Returns the new action list (each already clamped
+ * inside the window, with stable ids).
+ */
+export function runRangeEdit(
+  prompt: string,
+  repoRoot: string,
+  assetsDir: string,
+  rangeCtx: RangeEditContext,
+  options: PlannerOptions = {}
+): Promise<{ actions: Record<string, unknown>[] }> {
+  const extraArgs = [
+    '--scene', rangeCtx.scene,
+    '--start', String(rangeCtx.start),
+    '--end', String(rangeCtx.end),
+    '--context-json', JSON.stringify(rangeCtx.context)
+  ]
+  return runPythonEntry<{ actions: Record<string, unknown>[] }>(
+    'planner.run_range_edit',
+    prompt,
+    repoRoot,
+    assetsDir,
+    options,
+    (stdout) => JSON.parse(stdout) as { actions: Record<string, unknown>[] },
+    extraArgs
+  )
+}
+
 function runPythonEntry<T>(
   module: string,
   prompt: string,

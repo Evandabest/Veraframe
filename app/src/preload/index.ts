@@ -108,7 +108,9 @@ export interface ProjectFile {
   projectStyle?: {
     lighting?: string
   }
-  /** Non-destructive branch snapshots; optional for back-compat. */
+  /** Non-destructive branch snapshots; optional for back-compat.
+   *  Used by `saveProject` only — `editRange` lives on a separate
+   *  interface below. */
   takes?: Array<{
     id: string
     name: string
@@ -230,6 +232,20 @@ export type GenerateActionResponse =
   | { ok: true; action: Record<string, unknown> }
   | { ok: false; error: string }
 
+export interface EditRangeRequest {
+  prompt: string
+  scene: string
+  start: number
+  end: number
+  timelineContext: Record<string, unknown>
+  provider?: LLMProvider
+  model?: string
+}
+
+export type EditRangeResponse =
+  | { ok: true; actions: Record<string, unknown>[] }
+  | { ok: false; error: string }
+
 /** API surface exposed on `window.veraframe` for the React renderer. */
 const veraframe = {
   render: (request: RenderRequest): Promise<RenderResponse> =>
@@ -242,6 +258,8 @@ const veraframe = {
     ipcRenderer.invoke('enhancePrompt', request),
   generateAction: (request: GenerateActionRequest): Promise<GenerateActionResponse> =>
     ipcRenderer.invoke('generateAction', request),
+  editRange: (request: EditRangeRequest): Promise<EditRangeResponse> =>
+    ipcRenderer.invoke('editRange', request),
   getRegistry: (): Promise<RegistrySummary> => ipcRenderer.invoke('getRegistry'),
   rescanRegistry: (): Promise<
     { ok: true; registry: RegistrySummary } | { ok: false; error: string }
