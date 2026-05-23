@@ -56,9 +56,18 @@ def execute(
         arm_world = armature.matrix_world.translation
         arm_x, arm_y = arm_world.x, arm_world.y
 
-    target_pos = target_obj.matrix_world.translation
-    dx = target_pos.x - arm_x
-    dy = target_pos.y - arm_y
+    # If the target is another character that's been walk_to'd, its
+    # static `matrix_world` is at (0,0,0). Read the same effective-
+    # location prop walk_to writes. Spawn-point Empties don't carry
+    # this prop, so they fall back to their static world position.
+    stored_target = target_obj.get(_EFFECTIVE_LOCATION_PROP)
+    if stored_target is not None and len(stored_target) >= 2:
+        target_x, target_y = float(stored_target[0]), float(stored_target[1])
+    else:
+        target_world = target_obj.matrix_world.translation
+        target_x, target_y = target_world.x, target_world.y
+    dx = target_x - arm_x
+    dy = target_y - arm_y
     if dx == 0.0 and dy == 0.0:
         raise TurnToActionError(
             f"target '{target_obj.name}' is at the same XY position as armature '{armature.name}'"

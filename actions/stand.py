@@ -116,8 +116,11 @@ def _build_stand_action(armature, action_id: str, start_frame: int, end_frame: i
 
 
 def _build_hip_lift_action(action_id: str, start_frame: int, end_frame: int):
-    """Keyframe object.location.z from -SEATED_HIP_DROP_M back to 0
-    so the character lifts out of a seated drop a prior `sit` applied.
+    """Keyframe object.location.z from 0 up to +SEATED_HIP_DROP_M so
+    that, ADD-blended on top of the sit's held -SEATED_HIP_DROP_M, the
+    character lifts from seated (net 0 + -drop = -drop) back to standing
+    (net +drop + -drop = 0). HOLD on this strip keeps the net at 0
+    after stand ends.
 
     Same temp-Empty pattern as sit._build_hip_drop_action and
     walk_to._make_location_action — Blender 5.x's slotted-action API
@@ -131,9 +134,9 @@ def _build_hip_lift_action(action_id: str, start_frame: int, end_frame: int):
         dummy.animation_data_create()
         dummy.animation_data.action = lift_action
         for axis_index in range(3):
-            dummy.location[axis_index] = SEATED_HIP_DROP_M if axis_index == 2 else 0.0
-            dummy.keyframe_insert(data_path="location", index=axis_index, frame=start_frame)
             dummy.location[axis_index] = 0.0
+            dummy.keyframe_insert(data_path="location", index=axis_index, frame=start_frame)
+            dummy.location[axis_index] = SEATED_HIP_DROP_M if axis_index == 2 else 0.0
             dummy.keyframe_insert(data_path="location", index=axis_index, frame=end_frame)
     finally:
         bpy.data.objects.remove(dummy, do_unlink=True)
