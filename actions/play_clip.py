@@ -85,9 +85,12 @@ def execute(
             strip.repeat = max(1.0, window_len / natural_len * speed)
         except AttributeError:
             pass
-        strip.extrapolation = "HOLD"
-    else:
-        strip.extrapolation = "HOLD"
+    # NOTHING (not HOLD) so the clip's final body pose doesn't mask
+    # subsequent body actions on the same character. Without this, a
+    # play_clip followed by an idle/walk_to would still show the clip's
+    # last frame of leg/spine pose underneath. NLA's NOTHING ends the
+    # strip's contribution cleanly at end_frame.
+    strip.extrapolation = "NOTHING"
 
     return {
         "armature": armature.name,

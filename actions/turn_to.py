@@ -73,10 +73,16 @@ def execute(
         else float(armature.rotation_euler.z)
     )
 
+    # Keyframe DELTA, not absolute. The previous turn_to's strip is still
+    # ADD+HOLD-ing at `start_yaw`; adding an absolute-keyframed new strip
+    # on top would double the rotation. Mirror what walk_to does for
+    # translation: keyframe (0 → delta) so the ADD blend composes
+    # cleanly with the previous hold.
+    delta_yaw = target_yaw - start_yaw
     rot_action = _make_rotation_action(
         action_id=action_id,
-        start_yaw=start_yaw,
-        end_yaw=target_yaw,
+        start_yaw=0.0,
+        end_yaw=delta_yaw,
         start_frame=int(start_frame),
         end_frame=int(end_frame),
     )
@@ -86,10 +92,11 @@ def execute(
     strip = track.strips.new(
         name=f"rot_{action_id}", start=int(start_frame), action=rot_action
     )
-    # ADD blend over a rest rotation of (0, 0, 0) → the strip value IS the
-    # absolute yaw during the strip window. extrapolation=HOLD keeps the final
-    # yaw in place after the strip ends so subsequent actions see the new
-    # facing.
+    # ADD blend over a rest rotation of (0, 0, 0) plus the previous
+    # turn_to's HOLD. The strip keyframes a delta so the total yaw is
+    # the sum of all previous holds + this delta. After this strip
+    # HOLDs at `delta_yaw`, the cumulative ADD across all turn_to
+    # strips equals `target_yaw` — which is exactly what we want.
     strip.blend_type = "ADD"
     strip.extrapolation = "HOLD"
 

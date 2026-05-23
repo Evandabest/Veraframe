@@ -111,6 +111,12 @@ def execute(
     loc_strip = loc_track.strips.new(
         name=f"loc_{action_id}", start=int(start_frame), action=loc_action
     )
+    # Blender 5.x slot-rebind workaround (see idle.py): without this the
+    # ADD strip evaluates as zero and the character never translates.
+    if hasattr(loc_action, "slots") and len(loc_action.slots):
+        loc_strip.action_slot = loc_action.slots[0]
+        if hasattr(loc_strip, "action_slot_handle"):
+            loc_strip.action_slot_handle = loc_action.slots[0].handle
     loc_strip.blend_type = "ADD"
     loc_strip.extrapolation = "HOLD"
 

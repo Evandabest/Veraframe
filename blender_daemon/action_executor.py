@@ -673,8 +673,10 @@ def _dispatch_walk_to(
     target_name = action.get("target")
     scene = bpy.context.scene
     target_obj = scene.objects.get(target_name) if target_name else None
+    target_is_character = False
     if target_obj is None and target_name in characters:
         target_obj = characters[target_name]
+        target_is_character = True
     if target_obj is None:
         skipped.append(
             {
@@ -684,7 +686,19 @@ def _dispatch_walk_to(
             }
         )
         return
-    target_location = (target_obj.location.x, target_obj.location.y, target_obj.location.z)
+    # When the target is another character, that character may have
+    # already been walk_to'd elsewhere — their static `armature.location`
+    # is (0,0,0) but their effective position lives in the
+    # `veraframe_effective_location` custom prop. Spawn-point Empties
+    # don't move so reading their static location is fine.
+    if target_is_character:
+        stored = target_obj.get("veraframe_effective_location")
+        if stored is not None and len(stored) == 3:
+            target_location = (float(stored[0]), float(stored[1]), float(stored[2]))
+        else:
+            target_location = (target_obj.location.x, target_obj.location.y, target_obj.location.z)
+    else:
+        target_location = (target_obj.location.x, target_obj.location.y, target_obj.location.z)
 
     fbx_path = resolve_anim(char_id, "walk_in_place")
     if not fbx_path:
@@ -898,10 +912,9 @@ def _dispatch_pose(
     end_frame = int(action["end"] * fps)
     handler, error_cls = _POSE_HANDLERS[atype]
     try:
-        # Sit's `execute` accepts an `already_seated` kwarg that skips the
-        # hip-drop NLA strip so the body doesn't sink further on a
-        # subsequent "stays sitting" beat. Stand's signature is the
-        # plain one — passing extra kwargs would error.
+        # Sit accepts `already_seated`; stand accepts `already_standing`.
+        # Both flags skip the auxiliary hip-drop / hip-lift ADD strip so
+        # the body doesn't sink (sit) or float (stand) on a repeat.
         if atype == "sit":
             result = handler(
                 armature,
@@ -909,6 +922,18 @@ def _dispatch_pose(
                 end_frame,
                 action_id=action_id,
                 already_seated=already_seated,
+            )
+        elif atype == "stand":
+            # The caller passes `already_seated`; for stand we invert
+            # the meaning — "was already seated" means there IS a sit
+            # drop to cancel, so we DO place the lift. "Was already
+            # standing" (not seated) means there's no drop, skip the lift.
+            result = handler(
+                armature,
+                start_frame,
+                end_frame,
+                action_id=action_id,
+                already_standing=not already_seated,
             )
         else:
             result = handler(armature, start_frame, end_frame, action_id=action_id)

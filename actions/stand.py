@@ -18,7 +18,15 @@ def execute(
     start_frame: int,
     end_frame: int,
     action_id: str = "stand",
+    already_standing: bool = False,
 ) -> dict:
+    """Place a stand on `armature` for `[start_frame, end_frame]`.
+
+    When `already_standing` is True, no prior sit drop is held — placing
+    a lift would ADD a +SEATED_HIP_DROP_M offset that incorrectly raises
+    the character above ground. In that case we skip the lift track and
+    only place the leg-pose strip.
+    """
     if bpy is None:
         raise StandActionError("bpy unavailable")
 
@@ -47,30 +55,35 @@ def execute(
     strip.blend_type = "REPLACE"
     strip.extrapolation = "NOTHING"
 
-    # 2. Body lift on a separate ADD-blend track — adds +SEATED_HIP_DROP_M
-    #    to the armature z, cancelling whatever the sit strip is holding.
-    #    HOLD so the character stays upright after the stand ends.
-    lift_action = _build_hip_lift_action(action_id, s, e)
-    lift_track = armature.animation_data.nla_tracks.new()
-    lift_track.name = f"veraframe_stand_lift_{action_id}"
-    lift_strip = lift_track.strips.new(name=f"lift_{action_id}", start=s, action=lift_action)
-    # Blender 5.x slot-rebind workaround (see idle.py): without this the
-    # ADD strip evaluates as zero and the body never lifts back up.
-    if hasattr(lift_action, "slots") and len(lift_action.slots):
-        lift_strip.action_slot = lift_action.slots[0]
-        if hasattr(lift_strip, "action_slot_handle"):
-            lift_strip.action_slot_handle = lift_action.slots[0].handle
-    lift_strip.blend_type = "ADD"
-    lift_strip.extrapolation = "HOLD"
+    # 2. Body lift on a separate ADD-blend track. Skipped when the
+    #    character is already standing (no prior sit drop to cancel) so
+    #    we don't raise the body above ground.
+    lift_track_name: str | None = None
+    if not already_standing:
+        lift_action = _build_hip_lift_action(action_id, s, e)
+        lift_track = armature.animation_data.nla_tracks.new()
+        lift_track.name = f"veraframe_stand_lift_{action_id}"
+        lift_strip = lift_track.strips.new(
+            name=f"lift_{action_id}", start=s, action=lift_action
+        )
+        # Blender 5.x slot-rebind workaround (see idle.py): without this
+        # the ADD strip evaluates as zero and the body never lifts back up.
+        if hasattr(lift_action, "slots") and len(lift_action.slots):
+            lift_strip.action_slot = lift_action.slots[0]
+            if hasattr(lift_strip, "action_slot_handle"):
+                lift_strip.action_slot_handle = lift_action.slots[0].handle
+        lift_strip.blend_type = "ADD"
+        lift_strip.extrapolation = "HOLD"
+        lift_track_name = lift_track.name
 
     return {
         "armature": armature.name,
         "track": track.name,
-        "lift_track": lift_track.name,
+        "lift_track": lift_track_name,
         "frame_start": s,
         "frame_end": e,
         "bones": list(SEATED_BONES),
-        "hip_lift_m": SEATED_HIP_DROP_M,
+        "hip_lift_m": 0.0 if already_standing else SEATED_HIP_DROP_M,
     }
 
 
