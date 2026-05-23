@@ -5,6 +5,7 @@ import { AssetsPanel } from './components/AssetsPanel'
 import { VerbPalette } from './components/VerbPalette'
 import { TakesPanel } from './components/TakesPanel'
 import { RangeEditPanel } from './components/RangeEditPanel'
+import { ScreenplayPreview } from './components/ScreenplayPreview'
 import { mergeRangeEdit } from './range-edit'
 import { formatTimelineMarkdown } from './docs'
 import { frozenInWindow, toggleFrozen } from './frozen'
@@ -255,11 +256,20 @@ function App(): React.JSX.Element {
       : `veraframe-doc-${stamp}.md`
     await window.veraframe.saveDocumentation({ content: md, defaultName })
   }
-  // Script mode lets the user author a multi-segment timestamped script
-  // (`@<time> <prompt>` per line) instead of one free-form prompt. When
-  // enabled the textarea is parsed into segments and compiled to a
-  // structured prompt the LLM honors verbatim.
-  const [scriptMode, setScriptMode] = useState(false)
+  // Prompt format (Step 46 + Step 40):
+  // - 'free'       — one prose prompt; the LLM picks the timing.
+  // - 'script'     — @<time> <prompt> per line, parsed locally.
+  // - 'screenplay' — full screenplay prose; LLM breaks it down into
+  //                  segments shown in a preview before render.
+  const [promptFormat, setPromptFormat] = useState<'free' | 'script' | 'screenplay'>('free')
+  const scriptMode = promptFormat === 'script'
+  // Screenplay breakdown state (Step 40). `proposed` is non-null while
+  // the preview panel is showing; cleared by Approve or Cancel.
+  const [screenplayProposed, setScreenplayProposed] = useState<
+    Array<{ start: number; end: number | null; prompt: string }> | null
+  >(null)
+  const [screenplayBusy, setScreenplayBusy] = useState(false)
+  const [screenplayError, setScreenplayError] = useState<string | null>(null)
   // Takes / branches: snapshots of the timeline + render the user can
   // flip between non-destructively. Persisted in the project file.
   const [takes, setTakes] = useState<Take[]>([])
@@ -519,8 +529,75 @@ function App(): React.JSX.Element {
     }
   }
 
+  const onBreakdownScreenplay = async (): Promise<void> => {
+    if (!prompt.trim()) return
+    setScreenplayBusy(true)
+    setScreenplayError(null)
+    const response = await window.veraframe.breakdownScreenplay({
+      text: prompt,
+      provider,
+      model: model.trim() || undefined
+    })
+    setScreenplayBusy(false)
+    if (!response.ok) {
+      setScreenplayError(response.error)
+      setScreenplayProposed([])
+      return
+    }
+    setScreenplayProposed(
+      response.segments.map((s) => ({ start: s.start, end: s.end, prompt: s.prompt }))
+    )
+  }
+
+  const onApproveScreenplay = async (
+    segments: Array<{ start: number; end: number | null; prompt: string }>
+  ): Promise<void> => {
+    if (segments.length === 0) return
+    // Compile the approved segments into a structured prompt; reuse the
+    // exact same downstream pipeline that Script mode uses.
+    const compiled = compileScriptToPrompt(
+      segments.map((s) => ({ start: s.start, end: s.end, prompt: s.prompt, line: 0 }))
+    )
+    setScreenplayProposed(null)
+    setScreenplayError(null)
+    const startedAt = Date.now()
+    setState({ status: 'running', startedAt })
+    const response = await window.veraframe.render({
+      mode: 'llm',
+      prompt: compiled,
+      provider,
+      model: model.trim() || undefined,
+      selectedScene: selectedSceneId ?? undefined,
+      selectedCharacters:
+        selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
+      quality,
+      generateAudio,
+      projectStyle,
+      physicsPostPass
+    })
+    const elapsedMs = Date.now() - startedAt
+    if (response.ok) {
+      setState({
+        status: 'success',
+        renderId: response.renderId,
+        videoUrl: response.videoUrl,
+        durationSec: response.durationSec,
+        timeline: response.timeline,
+        elapsedMs
+      })
+    } else {
+      setState({ status: 'error', message: response.error, elapsedMs })
+    }
+  }
+
   const onRender = async (): Promise<void> => {
     if (mode === 'llm' && !prompt.trim()) return
+    if (mode === 'llm' && promptFormat === 'screenplay') {
+      // Screenplay mode goes through the preview first; the Render
+      // button shows "Break down" in that case (see below).
+      await onBreakdownScreenplay()
+      return
+    }
     // In script mode, compile the timestamped lines into a structured prompt
     // before sending to the LLM. If parsing produces errors we leave the raw
     // text alone — the UI surfaces the error inline.
@@ -1098,17 +1175,21 @@ function App(): React.JSX.Element {
               LLM (requires API key)
             </label>
             {mode === 'llm' && (
-              <label
-                className="ml-auto flex items-center gap-2 text-xs text-neutral-300"
-                title="Script mode: author multiple timestamped prompts, one per line (e.g. '@0 walk to door' / '@4 wave')"
-              >
-                <input
-                  type="checkbox"
-                  checked={scriptMode}
-                  onChange={(e) => setScriptMode(e.target.checked)}
+              <label className="ml-auto flex items-center gap-2 text-xs text-neutral-300">
+                Format
+                <select
+                  value={promptFormat}
+                  onChange={(e) =>
+                    setPromptFormat(e.target.value as 'free' | 'script' | 'screenplay')
+                  }
                   disabled={isRunning}
-                />
-                Script mode
+                  title="Prose: free description. Script: @<time> lines. Screenplay: full screenplay text, broken into beats."
+                  className="rounded border border-neutral-800 bg-neutral-950 px-1.5 py-0.5 text-xs focus:border-neutral-500 focus:outline-none"
+                >
+                  <option value="free">Prose</option>
+                  <option value="script">Script</option>
+                  <option value="screenplay">Screenplay</option>
+                </select>
               </label>
             )}
           </div>
@@ -1120,9 +1201,11 @@ function App(): React.JSX.Element {
               disabled={mode !== 'llm' || isRunning}
               placeholder={
                 mode === 'llm'
-                  ? scriptMode
+                  ? promptFormat === 'script'
                     ? '@0 alice walks to the door\n@4 alice waves at bob\n@6-10 they argue'
-                    : 'Describe a scene, e.g. "the student walks to the center of the lab and smiles"'
+                    : promptFormat === 'screenplay'
+                      ? 'INT. CLASSROOM - DAY\n\nALICE enters through the door.\n\nALICE\nWhere is the experiment?\n\nBOB\nBehind you.'
+                      : 'Describe a scene, e.g. "the student walks to the center of the lab and smiles"'
                   : 'Mock mode renders a canned timeline; no prompt needed.'
               }
               className="min-h-24 w-full resize-y rounded-md border border-neutral-800 bg-neutral-950 p-3 pr-24 text-sm font-mono placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none disabled:opacity-50"
@@ -1141,6 +1224,38 @@ function App(): React.JSX.Element {
           </div>
           {enhanceError && (
             <p className="text-xs text-red-400">Enhance failed: {enhanceError}</p>
+          )}
+
+          {mode === 'llm' && promptFormat === 'screenplay' && (
+            <ScreenplayPreview
+              proposed={
+                screenplayProposed === null
+                  ? null
+                  : (screenplayProposed.map((s) => ({
+                      start: s.start,
+                      end: s.end,
+                      prompt: s.prompt,
+                      line: 0
+                    })) as unknown as Array<{
+                      start: number
+                      end: number | null
+                      prompt: string
+                      line: number
+                    }>)
+              }
+              generating={screenplayBusy}
+              error={screenplayError}
+              onRebreak={onBreakdownScreenplay}
+              onApprove={(segs) =>
+                onApproveScreenplay(
+                  segs.map((s) => ({ start: s.start, end: s.end, prompt: s.prompt }))
+                )
+              }
+              onCancel={() => {
+                setScreenplayProposed(null)
+                setScreenplayError(null)
+              }}
+            />
           )}
 
           {mode === 'llm' && scriptMode && prompt.trim() !== '' && (() => {
@@ -1293,10 +1408,16 @@ function App(): React.JSX.Element {
             <button
               type="button"
               onClick={onRender}
-              disabled={disabledSubmit}
+              disabled={disabledSubmit || screenplayBusy}
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
             >
-              {isRunning ? 'Rendering…' : 'Render'}
+              {isRunning
+                ? 'Rendering…'
+                : promptFormat === 'screenplay' && mode === 'llm'
+                  ? screenplayBusy
+                    ? 'Breaking down…'
+                    : 'Break down'
+                  : 'Render'}
             </button>
             <div
               className="inline-flex overflow-hidden rounded-md border border-neutral-700 text-xs"
