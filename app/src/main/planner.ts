@@ -92,6 +92,61 @@ export interface ActionGenContext {
  * natural-language prompt. The caller's character/start/end/id are enforced
  * server-side, so the LLM only chooses the action type and its parameters.
  */
+/**
+ * Synthesize spoken audio for one `talk` action's text and write to outPath.
+ * Returns `{ duration_s, output_path, provider, voice }` so the caller can
+ * place the clip on the timeline. Errors bubble up as PlannerError.
+ */
+export function runTts(
+  text: string,
+  outPath: string,
+  repoRoot: string
+): Promise<{ duration_s: number; output_path: string; provider: string; voice: string }> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '--directory',
+      repoRoot,
+      'run',
+      'python',
+      '-m',
+      'planner.run_tts',
+      '--text',
+      text,
+      '--out',
+      outPath
+    ]
+    const env: NodeJS.ProcessEnv = { ...process.env }
+    env.LITELLM_LOG = env.LITELLM_LOG ?? 'ERROR'
+    const child = spawn('uv', args, { stdio: ['ignore', 'pipe', 'pipe'], env })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8')
+    })
+    child.stderr.on('data', (chunk) => {
+      const text = chunk.toString('utf8')
+      stderr += text
+      for (const line of text.split('\n')) {
+        if (line.trim()) console.log(`[tts] ${line}`)
+      }
+    })
+    child.once('error', (err) => {
+      reject(new PlannerError(`uv spawn failed: ${err.message}`))
+    })
+    child.once('close', (code) => {
+      if (code !== 0) {
+        reject(new PlannerError(`run_tts exited ${code}: ${stderr.trim()}`))
+        return
+      }
+      try {
+        resolve(JSON.parse(stdout))
+      } catch (e) {
+        reject(new PlannerError(`run_tts output unparsable: ${(e as Error).message}`))
+      }
+    })
+  })
+}
+
 export function runActionGen(
   prompt: string,
   repoRoot: string,
