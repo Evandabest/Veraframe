@@ -150,4 +150,21 @@ describe('buildCharacterManifest', () => {
     })
     expect(m.description).toBe('lab student')
   })
+
+  it('writes default_emotion and voice when provided', () => {
+    const m = buildCharacterManifest({
+      id: 'alice',
+      displayName: 'Alice',
+      defaultEmotion: 'sorrow',
+      voice: 'en-US-AriaNeural'
+    })
+    expect(m.default_emotion).toBe('sorrow')
+    expect(m.voice).toBe('en-US-AriaNeural')
+  })
+
+  it('defaults default_emotion and voice to empty strings', () => {
+    const m = buildCharacterManifest({ id: 'alice', displayName: 'Alice' })
+    expect(m.default_emotion).toBe('')
+    expect(m.voice).toBe('')
+  })
 })

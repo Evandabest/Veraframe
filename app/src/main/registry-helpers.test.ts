@@ -30,14 +30,20 @@ const fakeRegistry = (userDir?: string): AssetRegistry => ({
       displayName: 'Alice',
       meshPath: '/repo/assets/characters/alice/mesh.fbx',
       rigType: 'mixamo',
-      animations: {}
+      animations: {},
+      description: '',
+      defaultEmotion: '',
+      voice: ''
     },
     bob: {
       id: 'bob',
       displayName: 'Bob',
       meshPath: '/Users/x/userdata/characters/bob/mesh.fbx',
       rigType: 'mixamo',
-      animations: {}
+      animations: {},
+      description: '',
+      defaultEmotion: '',
+      voice: ''
     }
   },
   animations: {}

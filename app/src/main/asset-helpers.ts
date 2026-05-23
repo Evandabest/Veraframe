@@ -97,6 +97,10 @@ export interface CharacterManifestInput {
   id: string
   displayName: string
   description?: string
+  /** One of the Emotion enum values. Empty / undefined skips the field. */
+  defaultEmotion?: string
+  /** TTS voice id; provider-specific (e.g. en-US-AriaNeural for Edge TTS). */
+  voice?: string
 }
 
 /** Build the on-disk `character.json` body for a newly uploaded character. */
@@ -105,6 +109,8 @@ export function buildCharacterManifest(input: CharacterManifestInput): Record<st
     id: input.id,
     display_name: input.displayName,
     description: input.description ?? '',
+    default_emotion: input.defaultEmotion ?? '',
+    voice: input.voice ?? '',
     mesh_file: 'character.fbx',
     rig_type: 'mixamo',
     animations: {

@@ -73,6 +73,33 @@ describe('loadAssets', () => {
     )
   })
 
+  it('reads character profile fields (description, default_emotion, voice)', () => {
+    writeManifest(`${root}/characters/c1/character.json`, {
+      id: 'c1',
+      display_name: 'Alice',
+      mesh_file: 'mesh.fbx',
+      description: 'lab student, anxious',
+      default_emotion: 'sorrow',
+      voice: 'en-US-AriaNeural'
+    })
+    const reg = loadAssets(root)
+    expect(reg.characters.c1.description).toBe('lab student, anxious')
+    expect(reg.characters.c1.defaultEmotion).toBe('sorrow')
+    expect(reg.characters.c1.voice).toBe('en-US-AriaNeural')
+  })
+
+  it('defaults profile fields to empty strings when missing', () => {
+    writeManifest(`${root}/characters/c1/character.json`, {
+      id: 'c1',
+      display_name: 'Alice',
+      mesh_file: 'mesh.fbx'
+    })
+    const c = loadAssets(root).characters.c1
+    expect(c.description).toBe('')
+    expect(c.defaultEmotion).toBe('')
+    expect(c.voice).toBe('')
+  })
+
   it('skips directories without a manifest', () => {
     mkdirSync(`${root}/scenes/orphan`, { recursive: true })
     const reg = loadAssets(root)

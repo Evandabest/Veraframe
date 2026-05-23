@@ -19,6 +19,16 @@ export interface CharacterManifest {
    *  the executor expects ("idle", "walk_in_place", etc.). When non-empty
    *  these override the global animations registry for this character. */
   animations: Record<string, string>
+  /** Free-form bio shown in the Library and folded into the LLM system
+   *  prompt so the model can reason about the character ("anxious lab
+   *  student"). Empty string when unset. */
+  description: string
+  /** Default Emotion (one of: neutral, joy, angry, sorrow, fun) applied
+   *  to walk_to / idle when the LLM doesn't pick one. Empty string = none. */
+  defaultEmotion: string
+  /** TTS voice override. Maps to `--voice` on `planner.run_tts`. Empty
+   *  string falls back to the project-wide default. */
+  voice: string
 }
 
 export interface AnimationManifest {
@@ -71,7 +81,11 @@ export function loadAssets(assetsDir: string, userAssetsDir?: string): AssetRegi
           displayName: String(raw.display_name ?? raw.id),
           meshPath: resolvePath(d, String(raw.mesh_file)),
           rigType: String(raw.rig_type ?? 'mixamo'),
-          animations
+          animations,
+          description: typeof raw.description === 'string' ? raw.description : '',
+          defaultEmotion:
+            typeof raw.default_emotion === 'string' ? raw.default_emotion : '',
+          voice: typeof raw.voice === 'string' ? raw.voice : ''
         }
       }
     )
