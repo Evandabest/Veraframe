@@ -30,6 +30,9 @@ export interface RenderRequest {
   selectedCharacters?: string[]
   /** Render quality preset. 'draft' = fast iteration; 'hifi' = full quality. */
   quality?: 'draft' | 'hifi'
+  /** When true, synthesize spoken audio for every `talk` action and mux it
+   *  into the rendered MP4. Requires OPENAI_API_KEY in the launching shell. */
+  generateAudio?: boolean
 }
 
 export interface RegistrySceneSummary {

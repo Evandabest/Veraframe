@@ -46,6 +46,8 @@ export interface RenderRequest {
   selectedCharacters?: string[]
   /** Render quality preset. Defaults to 'hifi'. */
   quality?: 'draft' | 'hifi'
+  /** Whether to synthesize audio for `talk` actions and mux into the MP4. */
+  generateAudio?: boolean
 }
 
 interface RenderSuccess {
@@ -325,7 +327,9 @@ app.whenReady().then(async () => {
       const result: RenderResult = await runTimeline(daemonHandle, assets, timeline, {
         onProgress: ({ step, detail }) => sendProgress(step, detail),
         incremental: incrementalConfig,
-        quality: request.quality
+        quality: request.quality,
+        repoRoot: resolveRepoRoot(),
+        generateAudio: request.generateAudio
       })
       renderedVideos.set(result.renderId, result.videoPath)
       return {
