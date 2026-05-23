@@ -97,18 +97,23 @@ def default_passes() -> list[tuple[str, ValidatorPass]]:
         beat_coherence,
         channel_conflicts,
         dialog_companion,
+        reference_autofix,
         reference_check,
     )
 
     return [
-        # 1. Reference resolution first — every downstream pass assumes
-        #    targets / cameras / characters resolve.
+        # 1. Snap close-but-wrong references to the nearest valid name —
+        #    catches LLM near-misses like "doorway" → "door" without
+        #    burning a retry round.
+        ("reference_autofix", reference_autofix.run),
+        # 2. Hard reference resolution. Anything still broken after
+        #    autofix surfaces as an issue for the LLM retry loop.
         ("reference_check", reference_check.run),
-        # 2. Channel conflicts (overlap detection on the same body channel).
+        # 3. Channel conflicts (overlap detection on the same body channel).
         ("channel_conflicts", channel_conflicts.run),
-        # 3. Dialog companion — adds a default look_at to long talks.
+        # 4. Dialog companion — adds a default look_at to long talks.
         ("dialog_companion", dialog_companion.run),
-        # 4. Beat coherence — warns about empty shots.
+        # 5. Beat coherence — warns about empty shots.
         ("beat_coherence", beat_coherence.run),
     ]
 
