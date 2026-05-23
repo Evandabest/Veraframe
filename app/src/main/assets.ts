@@ -7,6 +7,7 @@ export interface SceneManifest {
   blendPath: string
   spawnPoints: string[]
   cameraPresets: string[]
+  lightingPresets: string[]
 }
 
 export interface CharacterManifest {
@@ -52,7 +53,8 @@ export function loadAssets(assetsDir: string, userAssetsDir?: string): AssetRegi
       displayName: String(raw.display_name ?? raw.id),
       blendPath: resolvePath(d, String(raw.blend_file)),
       spawnPoints: (raw.spawn_points ?? []) as string[],
-      cameraPresets: (raw.camera_presets ?? []) as string[]
+      cameraPresets: (raw.camera_presets ?? []) as string[],
+      lightingPresets: (raw.lighting_presets ?? []) as string[]
     }))
   const scanCharacters = (dir: string): Record<string, CharacterManifest> =>
     loadGroup<CharacterManifest>(

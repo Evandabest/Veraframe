@@ -47,6 +47,9 @@ export interface RegistrySceneSummary {
   displayName: string
   spawnPoints: string[]
   cameraPresets: string[]
+  /** Lighting preset names declared by the scene's `scene.json`. Used by the
+   *  UI to populate the per-project lighting lock dropdown. */
+  lightingPresets: string[]
   userProvided: boolean
 }
 

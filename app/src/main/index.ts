@@ -399,7 +399,7 @@ app.whenReady().then(async () => {
   const registrySummary = (
     reg: AssetRegistry | null
   ): {
-    scenes: Array<{ id: string; displayName: string; spawnPoints: string[]; cameraPresets: string[]; userProvided: boolean }>
+    scenes: Array<{ id: string; displayName: string; spawnPoints: string[]; cameraPresets: string[]; lightingPresets: string[]; userProvided: boolean }>
     characters: Array<{ id: string; displayName: string; userProvided: boolean }>
   } => {
     if (!reg) return { scenes: [], characters: [] }
@@ -410,6 +410,7 @@ app.whenReady().then(async () => {
         displayName: s.displayName,
         spawnPoints: s.spawnPoints,
         cameraPresets: s.cameraPresets,
+        lightingPresets: s.lightingPresets,
         userProvided: Boolean(userDir && s.blendPath.startsWith(userDir))
       })),
       characters: Object.values(reg.characters).map((c) => ({

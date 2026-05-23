@@ -202,6 +202,10 @@ function App(): React.JSX.Element {
   const [state, setState] = useState<RenderState>({ status: 'idle' })
   const [quality, setQuality] = useState<'draft' | 'hifi'>('hifi')
   const [generateAudio, setGenerateAudio] = useState(false)
+  // Project-level style lock. When set, the daemon injects defaults into
+  // every shot (e.g. set_lighting at shot start) unless the author already
+  // authored the same kind of action at the shot's start.
+  const [projectStyle, setProjectStyle] = useState<{ lighting?: string }>({})
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
   const onProviderChange = (next: LLMProvider): void => {
@@ -267,7 +271,8 @@ function App(): React.JSX.Element {
       const renderResp = await window.veraframe.render({
         mode: 'direct',
         timeline: p.timeline,
-        quality
+        quality,
+        projectStyle
       })
       const elapsedMs = Date.now() - startedAt
       if (renderResp.ok) {
@@ -313,7 +318,8 @@ function App(): React.JSX.Element {
       selectedCharacters:
         mode === 'llm' && selectedCharacterIds.length > 0 ? selectedCharacterIds : undefined,
       quality,
-      generateAudio
+      generateAudio,
+      projectStyle
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -506,7 +512,8 @@ function App(): React.JSX.Element {
       timeline: tl as unknown as Record<string, unknown>,
       incremental,
       quality,
-      generateAudio
+      generateAudio,
+      projectStyle
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -576,7 +583,8 @@ function App(): React.JSX.Element {
       timeline: tl as unknown as Record<string, unknown>,
       incremental,
       quality,
-      generateAudio
+      generateAudio,
+      projectStyle
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -639,7 +647,8 @@ function App(): React.JSX.Element {
       mode: 'direct',
       timeline: tl as unknown as Record<string, unknown>,
       quality,
-      generateAudio
+      generateAudio,
+      projectStyle
     })
     const elapsedMs = Date.now() - startedAt
     if (response.ok) {
@@ -763,6 +772,12 @@ function App(): React.JSX.Element {
           onEditScene={setEditSceneId}
           onEditCharacter={setEditCharacterId}
           onRefresh={refreshRegistry}
+          projectLighting={projectStyle.lighting}
+          onProjectLightingChange={(next) =>
+            setProjectStyle((prev) =>
+              next === '' ? { ...prev, lighting: undefined } : { ...prev, lighting: next }
+            )
+          }
           disabled={isRunning}
         />
 

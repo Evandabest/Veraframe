@@ -28,6 +28,12 @@ export interface AssetsPanelProps {
   onEditScene: (id: string) => void
   onEditCharacter: (id: string) => void
   onRefresh: () => void
+  /** Project-level lighting lock. When non-empty the daemon injects a
+   *  default set_lighting at every shot's start. */
+  projectLighting?: string
+  /** Callback fired when the user picks a different lighting lock; pass an
+   *  empty string to clear the lock. */
+  onProjectLightingChange?: (next: string) => void
   disabled?: boolean
 }
 
@@ -45,8 +51,12 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
     onEditScene,
     onEditCharacter,
     onRefresh,
+    projectLighting,
+    onProjectLightingChange,
     disabled = false
   } = props
+
+  const activeScene = registry.scenes.find((s) => s.id === selectedSceneId) ?? null
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
@@ -82,6 +92,54 @@ export function AssetsPanel(props: AssetsPanelProps): React.JSX.Element {
         onEditCharacter={onEditCharacter}
         disabled={disabled}
       />
+
+      {activeScene && activeScene.lightingPresets.length > 0 && onProjectLightingChange && (
+        <LightingLockRow
+          presets={activeScene.lightingPresets}
+          value={projectLighting ?? ''}
+          onChange={onProjectLightingChange}
+          disabled={disabled}
+        />
+      )}
+    </div>
+  )
+}
+
+interface LightingLockRowProps {
+  presets: string[]
+  value: string
+  onChange: (next: string) => void
+  disabled: boolean
+}
+
+function LightingLockRow({ presets, value, onChange, disabled }: LightingLockRowProps): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <label className="text-sm font-medium leading-none text-neutral-300">Lighting lock</label>
+        <InfoTip label="What this does">
+          <p className="font-semibold text-neutral-100">Project lighting lock</p>
+          <p className="mt-1">
+            When set, every shot starts with this lighting preset unless you
+            authored a different <code className="font-mono">set_lighting</code>{' '}
+            at the shot&apos;s start. Useful for keeping a consistent mood
+            across long sequences.
+          </p>
+        </InfoTip>
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+      >
+        <option value="">— none —</option>
+        {presets.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }
