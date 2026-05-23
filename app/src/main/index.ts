@@ -871,6 +871,11 @@ app.whenReady().then(async () => {
     model: string
     /** Optional last-rendered timeline JSON. */
     timeline: Record<string, unknown> | null
+    /** Per-project style lock (lighting preset, etc.). Optional for
+     *  back-compat with projects saved before this field existed. */
+    projectStyle?: {
+      lighting?: string
+    }
   }
 
   ipcMain.handle(

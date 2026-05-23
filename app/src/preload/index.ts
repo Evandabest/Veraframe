@@ -102,6 +102,12 @@ export interface ProjectFile {
   provider: string
   model: string
   timeline: Record<string, unknown> | null
+  /** Per-project style lock (e.g. a default lighting preset applied to
+   *  every shot). Optional; missing on projects saved before this field
+   *  existed. */
+  projectStyle?: {
+    lighting?: string
+  }
 }
 
 export type SaveProjectResponse =
