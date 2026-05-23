@@ -821,6 +821,12 @@ function App(): React.JSX.Element {
     setVerbPaletteOpen(false)
   }
 
+  // Holds the prompt text the user typed for the in-progress action so
+  // we can append it to the main scene prompt at Accept time. Stored
+  // separately from `pendingAction` because the LLM-generated action
+  // doesn't necessarily carry the original phrasing.
+  const [pendingActionPrompt, setPendingActionPrompt] = useState<string>('')
+
   const onGenerateAction = async (promptText: string): Promise<void> => {
     if (!editor || state.status !== 'success') return
     setGeneratingAction(true)
@@ -841,6 +847,7 @@ function App(): React.JSX.Element {
     setGeneratingAction(false)
     if (response.ok) {
       setPendingAction(response.action as TimelineAction)
+      setPendingActionPrompt(promptText)
     } else {
       setActionError(response.error)
     }
@@ -869,6 +876,20 @@ function App(): React.JSX.Element {
     if (pendingAction.end > targetShot.end) {
       targetShot.end = pendingAction.end
     }
+    // Append the new beat's prompt to the scene prompt at the top so a
+    // future full Render reproduces this addition. Skip on the edit
+    // flow (editor.original truthy) — the user's modifying an existing
+    // beat, not introducing a new one. Trim, sentence-case, append with
+    // a space and a period if missing.
+    if (!editor.original && pendingActionPrompt.trim()) {
+      const beat = pendingActionPrompt.trim().replace(/[.!?]+$/, '')
+      const prefix = prompt.trim()
+      const next = prefix
+        ? `${prefix.replace(/[.!?]?\s*$/, '.')} Then ${beat}.`
+        : `${beat}.`
+      setPrompt(next)
+    }
+    setPendingActionPrompt('')
     closeEditor()
 
     // Pick the incremental strategy:
