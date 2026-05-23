@@ -258,7 +258,8 @@ function App(): React.JSX.Element {
       provider,
       model,
       timeline: currentTimeline,
-      projectStyle
+      projectStyle,
+      takes
     })
     if (response.ok) {
       setProjectPath(response.path)
@@ -286,6 +287,8 @@ function App(): React.JSX.Element {
     setSelectedSceneId(p.selectedScene)
     setSelectedCharacterIds(p.selectedCharacters)
     setProjectStyle(p.projectStyle ?? {})
+    setTakes(p.takes ?? [])
+    setActiveTakeId(null)
     if (p.timeline) {
       // Re-render the stored timeline so the user gets back the video editor
       // populated. This is a direct-mode render — no LLM, no mock fixture.

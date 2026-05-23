@@ -95,4 +95,38 @@ describe('parseProjectFile', () => {
     expect(out.project.projectStyle).toBeUndefined()
     expect(out.project.selectedScene).toBe('dark_lab')
   })
+
+  it('round-trips a takes array', () => {
+    const raw = serializeProjectFile({
+      ...samplePayload(),
+      takes: [
+        {
+          id: 'take_1',
+          name: 'Take 1',
+          savedAt: '2026-05-22T12:00:00.000Z',
+          timeline: { project: 'demo', scene: 'lab', shots: [] },
+          renderId: 'render_abc',
+          videoUrl: 'veraframe-render://render_abc/video.mp4',
+          durationSec: 12.5,
+          prompt: 'walk'
+        }
+      ]
+    })
+    const out = parseProjectFile(raw)
+    if (!out.ok) throw new Error(out.error)
+    expect(out.project.takes).toHaveLength(1)
+    expect(out.project.takes?.[0].name).toBe('Take 1')
+    expect(out.project.takes?.[0].renderId).toBe('render_abc')
+  })
+
+  it('accepts older files missing takes', () => {
+    const legacy = {
+      version: 1,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      ...samplePayload()
+    }
+    const out = parseProjectFile(JSON.stringify(legacy))
+    if (!out.ok) throw new Error(out.error)
+    expect(out.project.takes).toBeUndefined()
+  })
 })

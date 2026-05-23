@@ -108,6 +108,17 @@ export interface ProjectFile {
   projectStyle?: {
     lighting?: string
   }
+  /** Non-destructive branch snapshots; optional for back-compat. */
+  takes?: Array<{
+    id: string
+    name: string
+    savedAt: string
+    timeline: Record<string, unknown>
+    renderId: string
+    videoUrl: string
+    durationSec: number
+    prompt: string
+  }>
 }
 
 export type SaveProjectResponse =

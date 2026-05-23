@@ -6,6 +6,17 @@
  * without spinning up a renderer process.
  */
 
+export interface ProjectFileTake {
+  id: string
+  name: string
+  savedAt: string
+  timeline: Record<string, unknown>
+  renderId: string
+  videoUrl: string
+  durationSec: number
+  prompt: string
+}
+
 export interface ProjectFile {
   version: 1
   /** ISO timestamp when this project was saved. */
@@ -23,6 +34,9 @@ export interface ProjectFile {
   projectStyle?: {
     lighting?: string
   }
+  /** Non-destructive branch snapshots. Optional for back-compat with
+   *  projects saved before takes existed; treat absent as []. */
+  takes?: ProjectFileTake[]
 }
 
 export type ProjectFilePayload = Omit<ProjectFile, 'version' | 'savedAt'>
