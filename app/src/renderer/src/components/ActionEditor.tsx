@@ -43,6 +43,10 @@ export interface ActionEditorProps {
   /** Optional: rewrite the prompt to use registry names. Mirrors the main
    *  Enhance button. Returns the rewritten text or throws/null on failure. */
   onEnhance?: (prompt: string) => Promise<string | null>
+  /** Seed value for the prompt textarea. Used by the verb palette to prefill
+   *  the verb's natural-language hint (e.g. "nod"). Re-applied each time
+   *  the editor opens. */
+  initialPrompt?: string
 }
 
 export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null {
@@ -59,24 +63,30 @@ export function ActionEditor(props: ActionEditorProps): React.JSX.Element | null
     onAccept,
     onReject,
     onClose,
-    onEnhance
+    onEnhance,
+    initialPrompt
   } = props
 
-  const [prompt, setPrompt] = useState('')
+  const [prompt, setPrompt] = useState(initialPrompt ?? '')
   const [enhancing, setEnhancing] = useState(false)
   const [enhanceError, setEnhanceError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Reset the prompt and focus the textarea each time the modal opens for a
-  // new target.
+  // new target. When the palette drop seeded a prompt we keep it instead of
+  // clearing — the cursor lands at the end so the user can finish the line.
   useEffect(() => {
     if (open) {
-      setPrompt('')
+      setPrompt(initialPrompt ?? '')
       setEnhanceError(null)
-      // Wait a tick so the element exists.
-      setTimeout(() => textareaRef.current?.focus(), 30)
+      setTimeout(() => {
+        const ta = textareaRef.current
+        if (!ta) return
+        ta.focus()
+        ta.setSelectionRange(ta.value.length, ta.value.length)
+      }, 30)
     }
-  }, [open, original?.id, laneId])
+  }, [open, original?.id, laneId, initialPrompt])
 
   if (!open) return null
 

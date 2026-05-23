@@ -3,6 +3,7 @@ import { TimelinePanel, type PendingActionEdit } from './components/TimelinePane
 import { ActionEditor } from './components/ActionEditor'
 import { AssetsPanel } from './components/AssetsPanel'
 import { VerbPalette } from './components/VerbPalette'
+import { verbByType } from './verbs'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
 import { EditSceneModal } from './components/EditSceneModal'
@@ -408,6 +409,9 @@ function App(): React.JSX.Element {
     /** Locked end (edit flow). Undefined when adding — LLM picks duration. */
     endSec: number | null
     original: TimelineAction | null
+    /** Seed for the prompt textarea — non-empty when opened via a verb-
+     *  palette drop so the user starts with the verb already typed. */
+    initialPrompt?: string
   }
   const [editor, setEditor] = useState<EditorTarget | null>(null)
   const [pendingAction, setPendingAction] = useState<TimelineAction | null>(null)
@@ -439,6 +443,25 @@ function App(): React.JSX.Element {
     setEditor({ laneId, startSec, endSec: null, original: null })
     setPendingAction(null)
     setActionError(null)
+  }
+
+  const onPaletteDrop = (laneId: string, startSec: number, verbType: string): void => {
+    if (state.status !== 'success') return
+    const verb = verbByType(verbType)
+    if (!verb) return
+    // Snap drop time to one-tenth of a second so the user gets a clean value
+    // in ActionEditor.
+    const snapped = Math.round(startSec * 10) / 10
+    setEditor({
+      laneId,
+      startSec: snapped,
+      endSec: null,
+      original: null,
+      initialPrompt: verb.promptSeed
+    })
+    setPendingAction(null)
+    setActionError(null)
+    setVerbPaletteOpen(false)
   }
 
   const onGenerateAction = async (promptText: string): Promise<void> => {
@@ -1086,6 +1109,7 @@ function App(): React.JSX.Element {
                 onAddAction={onAddAction}
                 onAddCharacter={openAddCharacter}
                 onRetimeAction={onRetimeAction}
+                onPaletteDrop={onPaletteDrop}
                 pendingEdit={pendingEditForPanel}
               />
             </>
@@ -1103,6 +1127,7 @@ function App(): React.JSX.Element {
         pendingAction={pendingAction}
         generating={generatingAction}
         error={actionError}
+        initialPrompt={editor?.initialPrompt}
         onGenerate={onGenerateAction}
         onAccept={onAcceptAction}
         onReject={onRejectAction}
