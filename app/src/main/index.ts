@@ -13,6 +13,14 @@ import {
   type ProjectFile,
   type ProjectFilePayload
 } from './project-file'
+import {
+  buildCharacterManifest,
+  buildSceneManifest,
+  detectCharacterFiles,
+  deriveSceneExtension,
+  isValidAssetId,
+  pickSceneFile
+} from './asset-helpers'
 // buildMockTimeline removed — mock mode now loads a pre-rendered fixture
 // from assets/fixtures/ instead of building + rendering a canned timeline.
 import { runTimeline, type RenderResult } from './render'
@@ -461,19 +469,10 @@ app.whenReady().then(async () => {
       try {
         const entries = (await readdir(folder)).filter((n) => !n.startsWith('.'))
         if (kind === 'character') {
-          const fbxFiles = entries.filter((n) => n.toLowerCase().endsWith('.fbx'))
-          const findBy = (predicate: (n: string) => boolean): string | null => {
-            const hit = fbxFiles.find((n) => predicate(n.toLowerCase()))
-            return hit ? resolvePath(folder, hit) : null
-          }
-          const idle =
-            findBy((n) => n === 'idle.fbx') ?? findBy((n) => /(^|[^a-z])idle/.test(n))
-          const walk =
-            findBy((n) => n === 'walk_in_place.fbx' || n === 'walk.fbx') ??
-            findBy((n) => /(^|[^a-z])walk/.test(n))
-          const mesh =
-            findBy((n) => n === 'character.fbx' || n === 'mesh.fbx') ??
-            findBy((n) => !/(^|[^a-z])(idle|walk)/.test(n))
+          const detected = detectCharacterFiles(entries)
+          const idle = detected.idle ? resolvePath(folder, detected.idle) : null
+          const walk = detected.walk ? resolvePath(folder, detected.walk) : null
+          const mesh = detected.mesh ? resolvePath(folder, detected.mesh) : null
           if (!mesh || !idle || !walk) {
             const missing = [
               !mesh && 'mesh (.fbx)',
@@ -506,16 +505,10 @@ app.whenReady().then(async () => {
           return { ok: true, kind: 'character', folderPath: folder, mesh, idle, walk, manifest }
         }
         // kind === 'scene'
-        const sceneCandidates = entries.filter((n) => {
-          const lower = n.toLowerCase()
-          return lower.endsWith('.blend') || lower.endsWith('.fbx')
-        })
-        if (sceneCandidates.length === 0) {
+        const preferred = pickSceneFile(entries)
+        if (!preferred) {
           return { ok: false, error: 'Folder has no .blend or .fbx scene file.' }
         }
-        // Prefer a file literally named scene.{blend,fbx}, then the first match.
-        const preferred =
-          sceneCandidates.find((n) => /^scene\.(blend|fbx)$/i.test(n)) ?? sceneCandidates[0]
         const sceneFile = resolvePath(folder, preferred)
         let manifest: {
           id?: string
@@ -599,7 +592,7 @@ app.whenReady().then(async () => {
         lightingPresets?: string[]
       }
     ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
-      if (!/^[a-z0-9_]+$/i.test(payload.id)) {
+      if (!isValidAssetId(payload.id)) {
         return { ok: false, error: "id must be alphanumeric / underscore only" }
       }
       const sceneDir = resolvePath(userAssetsDir, 'scenes', payload.id)
@@ -607,22 +600,19 @@ app.whenReady().then(async () => {
         await mkdir(sceneDir, { recursive: true })
         // Preserve the source extension so the daemon picks the right loader.
         // `.blend` opens via wm.open_mainfile; `.fbx` imports via import_scene.fbx.
-        const sourceExt = payload.sourcePath
-          .toLowerCase()
-          .replace(/^.*\./, '')
-        const ext = sourceExt === 'fbx' ? 'fbx' : 'blend'
+        const ext = deriveSceneExtension(payload.sourcePath)
         const sceneFile = `scene.${ext}`
         const destPath = resolvePath(sceneDir, sceneFile)
         await copyFile(payload.sourcePath, destPath)
-        const manifest = {
+        const manifest = buildSceneManifest({
           id: payload.id,
-          display_name: payload.displayName,
-          description: payload.description ?? '',
-          blend_file: sceneFile,
-          spawn_points: payload.spawnPoints,
-          camera_presets: payload.cameraPresets,
-          lighting_presets: payload.lightingPresets ?? ['default']
-        }
+          displayName: payload.displayName,
+          description: payload.description,
+          blendFile: sceneFile,
+          spawnPoints: payload.spawnPoints,
+          cameraPresets: payload.cameraPresets,
+          lightingPresets: payload.lightingPresets
+        })
         await writeFile(
           resolvePath(sceneDir, 'scene.json'),
           JSON.stringify(manifest, null, 2),
@@ -649,7 +639,7 @@ app.whenReady().then(async () => {
         description?: string
       }
     ): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
-      if (!/^[a-z0-9_]+$/i.test(payload.id)) {
+      if (!isValidAssetId(payload.id)) {
         return { ok: false, error: "id must be alphanumeric / underscore only" }
       }
       const charDir = resolvePath(userAssetsDir, 'characters', payload.id)
@@ -661,17 +651,11 @@ app.whenReady().then(async () => {
         await copyFile(payload.sourcePath, fbxDest)
         await copyFile(payload.idlePath, idleDest)
         await copyFile(payload.walkPath, walkDest)
-        const manifest = {
+        const manifest = buildCharacterManifest({
           id: payload.id,
-          display_name: payload.displayName,
-          description: payload.description ?? '',
-          mesh_file: 'character.fbx',
-          rig_type: 'mixamo',
-          animations: {
-            idle: 'idle.fbx',
-            walk_in_place: 'walk_in_place.fbx'
-          }
-        }
+          displayName: payload.displayName,
+          description: payload.description
+        })
         await writeFile(
           resolvePath(charDir, 'character.json'),
           JSON.stringify(manifest, null, 2),
