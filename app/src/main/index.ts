@@ -986,17 +986,34 @@ app.whenReady().then(async () => {
       _event,
       payload: ProjectFilePayload
     ): Promise<{ ok: true; path: string } | { ok: false; error: string }> => {
+      // Anchor the save dialog to a stable folder so users can always
+      // find their projects later. Creating it on first save means we
+      // never assume it exists.
+      const projectsDir = resolvePath(app.getPath('documents'), 'Veraframe')
+      try {
+        await mkdir(projectsDir, { recursive: true })
+      } catch {
+        /* fall back to whatever folder macOS picks */
+      }
       const result = await dialog.showSaveDialog({
         title: 'Save project',
-        defaultPath: 'untitled.veraframe',
+        defaultPath: resolvePath(projectsDir, 'untitled.veraframe'),
         filters: [{ name: 'Veraframe project', extensions: ['veraframe', 'json'] }]
       })
       if (result.canceled || !result.filePath) {
         return { ok: false, error: 'save canceled' }
       }
+      // Belt-and-suspenders: force the `.veraframe` extension even if the
+      // OS dropped it (macOS occasionally does when "Hide extension" is on
+      // and the user didn't type one). The Open dialog filters by
+      // extension, so a missing one makes the file invisible later.
+      let filePath = result.filePath
+      if (!/\.(veraframe|json)$/i.test(filePath)) {
+        filePath = `${filePath}.veraframe`
+      }
       try {
-        await writeFile(result.filePath, serializeProjectFile(payload), 'utf8')
-        return { ok: true, path: result.filePath }
+        await writeFile(filePath, serializeProjectFile(payload), 'utf8')
+        return { ok: true, path: filePath }
       } catch (err) {
         return { ok: false, error: (err as Error).message }
       }
@@ -1006,10 +1023,19 @@ app.whenReady().then(async () => {
   ipcMain.handle(
     'openProject',
     async (): Promise<{ ok: true; project: ProjectFile; path: string } | { ok: false; error: string }> => {
+      const projectsDir = resolvePath(app.getPath('documents'), 'Veraframe')
       const result = await dialog.showOpenDialog({
         title: 'Open project',
         properties: ['openFile'],
-        filters: [{ name: 'Veraframe project', extensions: ['veraframe', 'json'] }]
+        defaultPath: projectsDir,
+        // Two filter rows so the user can flip the picker's dropdown to
+        // "All files" if a custom-extension project ever slips through
+        // macOS's custom-UTI filtering (which happens in Electron dev
+        // builds whose Info.plist doesn't register .veraframe).
+        filters: [
+          { name: 'Veraframe project', extensions: ['veraframe', 'json'] },
+          { name: 'All files', extensions: ['*'] }
+        ]
       })
       if (result.canceled || !result.filePaths[0]) {
         return { ok: false, error: 'open canceled' }
