@@ -129,4 +129,25 @@ describe('parseProjectFile', () => {
     if (!out.ok) throw new Error(out.error)
     expect(out.project.takes).toBeUndefined()
   })
+
+  it('round-trips frozenActionIds', () => {
+    const raw = serializeProjectFile({
+      ...samplePayload(),
+      frozenActionIds: ['act_001', 'act_007']
+    })
+    const out = parseProjectFile(raw)
+    if (!out.ok) throw new Error(out.error)
+    expect(out.project.frozenActionIds).toEqual(['act_001', 'act_007'])
+  })
+
+  it('accepts older files missing frozenActionIds', () => {
+    const legacy = {
+      version: 1,
+      savedAt: '2026-01-01T00:00:00.000Z',
+      ...samplePayload()
+    }
+    const out = parseProjectFile(JSON.stringify(legacy))
+    if (!out.ok) throw new Error(out.error)
+    expect(out.project.frozenActionIds).toBeUndefined()
+  })
 })

@@ -37,6 +37,9 @@ export interface ProjectFile {
   /** Non-destructive branch snapshots. Optional for back-compat with
    *  projects saved before takes existed; treat absent as []. */
   takes?: ProjectFileTake[]
+  /** Action ids the user has approved / locked. Frozen actions guard
+   *  the range-edit + full-rerender flows. Optional for back-compat. */
+  frozenActionIds?: string[]
 }
 
 export type ProjectFilePayload = Omit<ProjectFile, 'version' | 'savedAt'>

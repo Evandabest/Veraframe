@@ -277,7 +277,8 @@ function App(): React.JSX.Element {
       model,
       timeline: currentTimeline,
       projectStyle,
-      takes
+      takes,
+      frozenActionIds
     })
     if (response.ok) {
       setProjectPath(response.path)
@@ -307,6 +308,7 @@ function App(): React.JSX.Element {
     setProjectStyle(p.projectStyle ?? {})
     setTakes(p.takes ?? [])
     setActiveTakeId(null)
+    setFrozenActionIds(p.frozenActionIds ?? [])
     if (p.timeline) {
       // Re-render the stored timeline so the user gets back the video editor
       // populated. This is a direct-mode render — no LLM, no mock fixture.
@@ -347,6 +349,7 @@ function App(): React.JSX.Element {
     setState({ status: 'idle' })
     setTakes([])
     setActiveTakeId(null)
+    setFrozenActionIds([])
     // Selections stay — they're driven by the registry which doesn't change.
   }
 

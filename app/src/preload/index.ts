@@ -121,6 +121,8 @@ export interface ProjectFile {
     durationSec: number
     prompt: string
   }>
+  /** Action ids the user has locked / approved. */
+  frozenActionIds?: string[]
 }
 
 export type SaveProjectResponse =
