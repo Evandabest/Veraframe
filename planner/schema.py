@@ -45,6 +45,28 @@ class IdleStyle(StrEnum):
     NERVOUS = "nervous"
 
 
+class BodyPart(StrEnum):
+    """Coarse body regions used by the optional `bone_mask` field on gestures.
+
+    A gesture's bone_mask declares which limbs the action drives. Listeners
+    use this to reason about layering: a `wave` (right_arm only) can run
+    concurrently with a `walk_to` (full-body locomotion) without clobbering
+    the legs, while two right_arm actions at the same time conflict.
+
+    Values are intentionally coarse (one per limb / region) so the LLM can
+    pick them by name without needing to know the underlying Mixamo bone
+    naming. The executor maps each part to its bones internally.
+    """
+
+    HEAD = "head"
+    SPINE = "spine"
+    LEFT_ARM = "left_arm"
+    RIGHT_ARM = "right_arm"
+    LEFT_LEG = "left_leg"
+    RIGHT_LEG = "right_leg"
+    FACE = "face"
+
+
 class ActionType(StrEnum):
     WALK_TO = "walk_to"
     IDLE = "idle"
@@ -114,6 +136,14 @@ class PointAtAction(_TimedBase):
     type: Literal["point_at"] = "point_at"
     character: str = Field(min_length=1)
     target: str = Field(min_length=1)
+    bone_mask: list[BodyPart] | None = Field(
+        default=None,
+        description=(
+            "Body parts this point gesture drives. Defaults to [right_arm]. Set"
+            " to override (e.g. left_arm) when the character should point with"
+            " a different limb."
+        ),
+    )
 
 
 class SitAction(_TimedBase):
@@ -151,25 +181,51 @@ class TalkAction(_TimedBase):
 
 
 class NodAction(_TimedBase):
-    """Vertical head-bone pitch oscillation (yes-nod)."""
+    """Vertical head-bone pitch oscillation (yes-nod).
+
+    Touches the head bone only — safe to layer over walk_to / idle.
+    """
 
     type: Literal["nod"] = "nod"
     character: str = Field(min_length=1)
+    bone_mask: list[BodyPart] | None = Field(
+        default=None,
+        description="Body parts this nod drives. Defaults to [head].",
+    )
 
 
 class ShakeHeadAction(_TimedBase):
-    """Horizontal head-bone yaw oscillation (no-shake)."""
+    """Horizontal head-bone yaw oscillation (no-shake).
+
+    Touches the head bone only — safe to layer over walk_to / idle.
+    """
 
     type: Literal["shake_head"] = "shake_head"
     character: str = Field(min_length=1)
+    bone_mask: list[BodyPart] | None = Field(
+        default=None,
+        description="Body parts this head shake drives. Defaults to [head].",
+    )
 
 
 class WaveAction(_TimedBase):
-    """Right-arm wave — raises and oscillates the forearm."""
+    """Right-arm wave — raises and oscillates the forearm.
+
+    Touches the right-arm bones only — safe to layer over walk_to / idle
+    (whose right-arm motion comes from the FBX cycle, which the wave
+    keyframes override at the pose level).
+    """
 
     type: Literal["wave"] = "wave"
     character: str = Field(min_length=1)
     target: str | None = None  # optional spawn point / character to wave at
+    bone_mask: list[BodyPart] | None = Field(
+        default=None,
+        description=(
+            "Body parts this wave drives. Defaults to [right_arm]. Override"
+            " to [left_arm] for a left-handed wave."
+        ),
+    )
 
 
 class CameraCutAction(_TimedBase):
@@ -289,3 +345,78 @@ class Project(BaseModel):
     scene: str = Field(min_length=1)
     characters: list[Character]
     shots: list[Shot]
+
+
+# Per-action-type defaults for the body parts the action drives. Used by
+# `effective_bone_mask` so callers don't need to know the implementation
+# detail of which bones each gesture touches — they only see body parts.
+_DEFAULT_BONE_MASKS: dict[str, list[BodyPart]] = {
+    "nod": [BodyPart.HEAD],
+    "shake_head": [BodyPart.HEAD],
+    "wave": [BodyPart.RIGHT_ARM],
+    "point_at": [BodyPart.RIGHT_ARM],
+    "look_at": [BodyPart.HEAD],
+    "smile": [BodyPart.FACE],
+    "frown": [BodyPart.FACE],
+    "blink": [BodyPart.FACE],
+    "talk": [BodyPart.FACE],
+    "turn_to": [BodyPart.SPINE],
+    # Whole-body locomotion / poses — everything else is "all parts".
+    "walk_to": [
+        BodyPart.HEAD,
+        BodyPart.SPINE,
+        BodyPart.LEFT_ARM,
+        BodyPart.RIGHT_ARM,
+        BodyPart.LEFT_LEG,
+        BodyPart.RIGHT_LEG,
+    ],
+    "idle": [
+        BodyPart.HEAD,
+        BodyPart.SPINE,
+        BodyPart.LEFT_ARM,
+        BodyPart.RIGHT_ARM,
+        BodyPart.LEFT_LEG,
+        BodyPart.RIGHT_LEG,
+    ],
+    "sit": [
+        BodyPart.HEAD,
+        BodyPart.SPINE,
+        BodyPart.LEFT_ARM,
+        BodyPart.RIGHT_ARM,
+        BodyPart.LEFT_LEG,
+        BodyPart.RIGHT_LEG,
+    ],
+    "stand": [
+        BodyPart.HEAD,
+        BodyPart.SPINE,
+        BodyPart.LEFT_ARM,
+        BodyPart.RIGHT_ARM,
+        BodyPart.LEFT_LEG,
+        BodyPart.RIGHT_LEG,
+    ],
+}
+
+
+def effective_bone_mask(action: Action) -> list[BodyPart]:
+    """Return the body parts an action drives, honoring an explicit
+    `bone_mask` override and falling back to the per-type default."""
+    explicit = getattr(action, "bone_mask", None)
+    if explicit:
+        return list(explicit)
+    return list(_DEFAULT_BONE_MASKS.get(action.type, []))
+
+
+def actions_conflict(a: Action, b: Action) -> bool:
+    """True if two actions on the same character overlap in time AND drive
+    at least one common body part. Camera / lighting actions never conflict.
+
+    Used by the validator and by Step 46's layering hints to surface
+    "wave + walk_to overlap and both drive the right arm" early."""
+    if a.character != getattr(b, "character", None):
+        return False
+    # Time overlap.
+    if a.end <= b.start or b.end <= a.start:
+        return False
+    parts_a = set(effective_bone_mask(a))
+    parts_b = set(effective_bone_mask(b))
+    return bool(parts_a & parts_b)
