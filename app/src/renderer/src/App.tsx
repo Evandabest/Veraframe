@@ -966,7 +966,7 @@ function App(): React.JSX.Element {
             </div>
             <label
               className="inline-flex items-center gap-1.5 text-xs text-neutral-300"
-              title="Synthesize voice audio for every talk action and mux into the MP4. Needs OPENAI_API_KEY set."
+              title="Synthesize voice audio for every talk action via Microsoft Edge TTS (no API key needed) and mux into the MP4."
             >
               <input
                 type="checkbox"
