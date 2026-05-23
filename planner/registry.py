@@ -332,6 +332,20 @@ DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
         ),
     ),
     ActionSpec(
+        name="over_shoulder",
+        description=(
+            "Over-the-shoulder dialogue shot: the camera sits behind `a` and "
+            "looks at `b`. A's shoulder/head appears in the corner of the "
+            "frame. Use this when one character is reacting to / speaking with "
+            "another and you want their POV-adjacent perspective."
+        ),
+        params=(
+            ParamSpec(name="a", description="Character whose shoulder we're behind."),
+            ParamSpec(name="b", description="Character being looked at."),
+            *_TIMING_PARAMS,
+        ),
+    ),
+    ActionSpec(
         name="set_lighting",
         description="Switch the scene's lighting to a named preset.",
         params=(

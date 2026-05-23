@@ -64,6 +64,8 @@ class ActionType(StrEnum):
     CAMERA_DOLLY = "camera_dolly"
     TRACK_SUBJECT = "track_subject"
     TWO_SHOT = "two_shot"
+    OVER_SHOULDER = "over_shoulder"
+    ORBIT = "orbit"
     SET_LIGHTING = "set_lighting"
 
 
@@ -205,6 +207,32 @@ class TwoShotAction(_TimedBase):
     b: str = Field(min_length=1)
 
 
+class OverShoulderAction(_TimedBase):
+    """Over-the-shoulder camera: positioned behind `a`, looking at `b`.
+
+    Classic dialogue framing — the viewer sees the side of A's shoulder/head
+    on one edge of the frame with B in conversation across the cut. The
+    camera sits at a fixed offset behind A (along the -direction from A to B)
+    and looks at B's upper body.
+    """
+
+    type: Literal["over_shoulder"] = "over_shoulder"
+    a: str = Field(min_length=1)
+    b: str = Field(min_length=1)
+
+
+class OrbitAction(_TimedBase):
+    """Active camera circles a target by `degrees` over the action duration.
+
+    Positive degrees rotate counterclockwise (when viewed from above).
+    Target is either a character handle or a scene spawn-point name.
+    """
+
+    type: Literal["orbit"] = "orbit"
+    target: str = Field(min_length=1)
+    degrees: float = Field(default=90.0)
+
+
 class SetLightingAction(_TimedBase):
     type: Literal["set_lighting"] = "set_lighting"
     preset: str = Field(min_length=1)
@@ -229,6 +257,8 @@ Action = Annotated[
     | CameraDollyAction
     | TrackSubjectAction
     | TwoShotAction
+    | OverShoulderAction
+    | OrbitAction
     | SetLightingAction,
     Field(discriminator="type"),
 ]

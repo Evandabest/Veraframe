@@ -22,6 +22,7 @@ from actions import frown as frown_action
 from actions import idle as idle_action
 from actions import look_at as look_at_action
 from actions import nod as nod_action
+from actions import over_shoulder as over_shoulder_action
 from actions import point_at as point_at_action
 from actions import set_lighting as set_lighting_action
 from actions import shake_head as shake_head_action
@@ -97,7 +98,15 @@ def execute_timeline(
     # the walk_to keyframes must already be in place by the time they
     # execute. set_lighting is also in pass-2 to keep it adjacent to camera
     # work (no functional requirement).
-    camera_types = {"camera_cut", "camera_dolly", "track_subject", "two_shot", "set_lighting"}
+    camera_types = {
+        "camera_cut",
+        "camera_dolly",
+        "track_subject",
+        "two_shot",
+        "over_shoulder",
+        "orbit",
+        "set_lighting",
+    }
 
     def _dispatch_body(action: dict) -> None:
         atype = action.get("type")
@@ -140,6 +149,8 @@ def execute_timeline(
             _dispatch_track_subject(action, characters, fps, executed, skipped)
         elif atype == "two_shot":
             _dispatch_two_shot(action, characters, fps, executed, skipped)
+        elif atype == "over_shoulder":
+            _dispatch_over_shoulder(action, characters, fps, executed, skipped)
         elif atype == "set_lighting":
             _dispatch_set_lighting(action, fps, executed, skipped)
         else:
@@ -815,6 +826,40 @@ def _dispatch_two_shot(
         skipped.append({"id": action_id, "type": "two_shot", "reason": str(e)})
         return
     executed.append({"id": action_id, "type": "two_shot", **result})
+
+
+def _dispatch_over_shoulder(
+    action: dict,
+    characters: dict,
+    fps: int,
+    executed: list[dict],
+    skipped: list[dict],
+) -> None:
+    action_id = action.get("id", "?")
+    a_id = action.get("a")
+    b_id = action.get("b")
+    a_armature = characters.get(a_id)
+    b_armature = characters.get(b_id)
+    if a_armature is None or b_armature is None:
+        missing = [name for name, arm in [(a_id, a_armature), (b_id, b_armature)] if arm is None]
+        skipped.append(
+            {
+                "id": action_id,
+                "type": "over_shoulder",
+                "reason": f"character(s) not loaded: {missing}",
+            }
+        )
+        return
+    start_frame = int(action["start"] * fps)
+    end_frame = int(action["end"] * fps)
+    try:
+        result = over_shoulder_action.execute(
+            a_armature, b_armature, start_frame, end_frame, action_id=action_id
+        )
+    except over_shoulder_action.OverShoulderError as e:
+        skipped.append({"id": action_id, "type": "over_shoulder", "reason": str(e)})
+        return
+    executed.append({"id": action_id, "type": "over_shoulder", **result})
 
 
 def _dispatch_camera_dolly(
