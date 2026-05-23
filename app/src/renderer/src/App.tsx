@@ -19,6 +19,7 @@ import {
 } from './takes'
 import { AssetUploadModal, type AssetKind } from './components/AssetUploadModal'
 import { EditCharacterModal } from './components/EditCharacterModal'
+import { CharacterLibraryModal } from './components/CharacterLibraryModal'
 import { EditSceneModal } from './components/EditSceneModal'
 import { AddCharacterModal } from './components/AddCharacterModal'
 import type { RegistrySummary, DaemonState } from '../../preload'
@@ -222,6 +223,7 @@ function App(): React.JSX.Element {
   // authored the same kind of action at the shot's start.
   const [projectStyle, setProjectStyle] = useState<{ lighting?: string }>({})
   const [verbPaletteOpen, setVerbPaletteOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   // Script mode lets the user author a multi-segment timestamped script
   // (`@<time> <prompt>` per line) instead of one free-form prompt. When
   // enabled the textarea is parsed into segments and compiled to a
@@ -911,6 +913,14 @@ function App(): React.JSX.Element {
               </button>
               <button
                 type="button"
+                onClick={() => setLibraryOpen(true)}
+                title="Open the persistent character library"
+                className="rounded-md border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
+              >
+                Library
+              </button>
+              <button
+                type="button"
                 onClick={() => setVerbPaletteOpen((v) => !v)}
                 title="Open the verb palette — drag chips onto lanes to add actions. Render a timeline first to enable drops."
                 className={`rounded-md border px-3 py-1 text-xs ${
@@ -1474,6 +1484,22 @@ function App(): React.JSX.Element {
         )
       })()}
       <VerbPalette open={verbPaletteOpen} onClose={() => setVerbPaletteOpen(false)} />
+      <CharacterLibraryModal
+        open={libraryOpen}
+        characters={registry.characters}
+        selectedCharacterIds={selectedCharacterIds}
+        onToggleCharacter={onToggleCharacter}
+        onEditCharacter={(id) => {
+          setLibraryOpen(false)
+          setEditCharacterId(id)
+        }}
+        onRemoveCharacter={onRemoveCharacter}
+        onAddCharacter={() => {
+          setLibraryOpen(false)
+          setUploadKind('character')
+        }}
+        onClose={() => setLibraryOpen(false)}
+      />
     </div>
   )
 }
