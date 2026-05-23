@@ -322,6 +322,7 @@ function App(): React.JSX.Element {
       projectStyle,
       takes,
       frozenActionIds,
+      renderFlags: { quality, generateAudio, physicsPostPass },
       activeRenderId: state.status === 'success' ? state.renderId : undefined
     })
     if (response.ok) {
@@ -356,6 +357,13 @@ function App(): React.JSX.Element {
     setTakes(p.takes ?? [])
     setActiveTakeId(null)
     setFrozenActionIds(p.frozenActionIds ?? [])
+    if (p.renderFlags) {
+      if (p.renderFlags.quality !== undefined) setQuality(p.renderFlags.quality)
+      if (p.renderFlags.generateAudio !== undefined) setGenerateAudio(p.renderFlags.generateAudio)
+      if (p.renderFlags.physicsPostPass !== undefined) {
+        setPhysicsPostPass(p.renderFlags.physicsPostPass)
+      }
+    }
     if (p.timeline && response.videoSidecar) {
       // Sidecar present — load the pre-rendered MP4 directly. No re-
       // render, the user can edit immediately.

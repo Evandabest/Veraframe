@@ -147,6 +147,12 @@ export interface ProjectFile {
   }>
   /** Action ids the user has locked / approved. */
   frozenActionIds?: string[]
+  /** Per-project render flags. */
+  renderFlags?: {
+    quality?: 'draft' | 'hifi'
+    generateAudio?: boolean
+    physicsPostPass?: boolean
+  }
 }
 
 export type SaveProjectResponse =

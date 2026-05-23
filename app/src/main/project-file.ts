@@ -40,6 +40,14 @@ export interface ProjectFile {
   /** Action ids the user has approved / locked. Frozen actions guard
    *  the range-edit + full-rerender flows. Optional for back-compat. */
   frozenActionIds?: string[]
+  /** Per-project render flags. These ride along so re-rendering an
+   *  opened project produces the same flavor of output (voice on, draft
+   *  vs hi-fi, foot-lock toggle). Each one optional for back-compat. */
+  renderFlags?: {
+    quality?: 'draft' | 'hifi'
+    generateAudio?: boolean
+    physicsPostPass?: boolean
+  }
 }
 
 export type ProjectFilePayload = Omit<ProjectFile, 'version' | 'savedAt'>
