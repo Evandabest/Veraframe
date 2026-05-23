@@ -31,6 +31,9 @@ class CharacterManifest(BaseModel):
     mesh_file: str = Field(min_length=1)
     rig_type: str = "mixamo"
     face_blendshapes: list[str] = Field(default_factory=list)
+    # Step 50 — persistent character profile. Optional; empty string when unset.
+    default_emotion: str = ""
+    voice: str = ""
 
 
 class AnimationManifest(BaseModel):
@@ -63,6 +66,9 @@ class CharacterSpec(BaseModel):
     mesh_path: Path
     rig_type: str
     face_blendshapes: tuple[str, ...]
+    # Step 50 — persistent character profile. Empty string when unset.
+    default_emotion: str = ""
+    voice: str = ""
 
 
 class AnimationSpec(BaseModel):
@@ -495,6 +501,12 @@ class Registry(BaseModel):
             lines.append("")
             lines.append(f"## `{character.id}` — {character.display_name}")
             lines.append(character.description)
+            if character.default_emotion:
+                lines.append(
+                    f"- Default emotion: `{character.default_emotion}` — apply"
+                    " this on walk_to / idle when the scene description does"
+                    " not say otherwise."
+                )
         return "\n".join(lines)
 
     def _actions_section(self) -> str:
@@ -546,6 +558,8 @@ def _load_characters(characters_dir: Path) -> dict[str, CharacterSpec]:
             mesh_path=manifest_path.parent / manifest.mesh_file,
             rig_type=manifest.rig_type,
             face_blendshapes=tuple(manifest.face_blendshapes),
+            default_emotion=manifest.default_emotion,
+            voice=manifest.voice,
         )
     return out
 
